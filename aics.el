@@ -1,4 +1,4 @@
-;;; aics.el --- An AI Coding Assistant for Emacs -*- lexical-binding: t; -*-
+;;; aics.el --- An AI Writing Assistant for Emacs -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2025 Sun Yi Ming
 ;;
@@ -15,7 +15,7 @@
 ;;
 ;;; Commentary:
 ;;
-;;  AICS is an AI-powered coding assistant that helps users create and manage content
+;;  AICS is an AI-powered writing assistant that helps users create and manage content
 ;;  in Emacs, including programs, documents, papers, and novels. It provides various
 ;;  operations like buffer modifications, file creation/deletion, and Elisp execution.
 ;;
