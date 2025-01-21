@@ -1,4 +1,4 @@
-;;; aics.el --- An AI Writing Assistant for Emacs -*- lexical-binding: t; -*-
+;;; aics.el --- An AI Writing Assistant -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2025 Sun Yi Ming
 ;;
@@ -23,141 +23,111 @@
 
 (require 'gptel)
 
+(defvar aics-system-role
+  "You are an expert assistant specializing in helping users with Emacs for \
+creating and managing various types of content, including code, documents, \
+academic papers, and even novels.")
+
 (defvar aics-system-message
-  "You are a highly capable assistant helping users work with Emacs to create \
-and manage content, including programs, documents, papers, and novels.
-Based on the user's request, you can generate one of the following actions:
+  (concat
+   aics-system-role
+   "\n"
+   "Based on the user's request, you can generate one or more of the following \
+actions:
 * Modify buffers
 * Create files
 * Delete files
 * Execute a piece of Elisp code
 
 If multiple actions are required, they should be provided in sequence, and the \
-program will execute them in the order they are listed.
+program will execute them in the order they are listed. You are free to add \
+comments or other explanatory details before, between, or after the actions as \
+needed.
 
 The specific format descriptions for these actions are as follows:
 
 ## Modify buffers
 Start with line:
-```
-**OP** MODIFY <FILEPATH>
-```
-`<FILEPATH>` refers to the filepath associated with the buffer. If the buffer is \
-not linked to any file, leave it empty.
 
-Following the start line, add one or more blank lines, then specify the
-SEARCH/REPLACE pairs.
+**OP** MODIFY `<NAME>`
 
+`<NAME>` refers to the name of the buffer being modified. Ensure the name is \
+enclosed in backticks.
+Following the start line, add one blank line, then specify the SEARCH/REPLACE \
+pairs.
 Each pair is structured as follows:
 
 Begin with the exact line:
-```
+
 *SEARCH*
-```
+
 Followed by the content to locate, enclosed in a markdown fenced code block.
 
 Then the exact line:
-```
+
 *REPLACE*
-```
+
 Followed by the replacement content, enclosed in a markdown fenced code block.
 
+For example:
+
+**OP** MODIFY `*scratch*`
+
+*SEARCH*
+```
+hello
+```
+*REPLACE*
+```
+good
+```
+*SEARCH*
+```
+world
+```
+*REPLACE*
+```
+morning
+```
+
 **NOTE**
-1. MODIFY operations can only be generated when the complete content of the \
-target buffer is known
-2. MODIFY operations must consist of only SEARCH/REPLACE pairs, with no \
-additional content or full file replacements
-
-### Rules for SEARCH/REPLACE:
-* Always include both `*SEARCH*` and `*REPLACE*` lines for every pair. \
-Missing either line is invalid
-* Operates on a line-by-line basis
-* Use the smallest number of consecutive lines necessary to uniquely identify \
-the target
-* Only the first match is processed for each SEARCH/REPLACE pair
-* Modifications to consecutive lines should be handled together within one \
-SEARCH/REPLACE pair whenever possible
-* Multiple SEARCH/REPLACE pairs can be used sequentially, each subsequent pair \
-operates on the result of the previous ones
-* Ensure that the code block fence is sufficiently long to correctly \
-encapsulate SEARCH/REPLACE content that contains backtick sequences, \
-preventing any Markdown parsing issues
-
-### Example
-Content of the current buffer:
-````
-hi world
-hi there
-...
-...
-...
-hi world
-```hi world
-````
-**Task**: Replace all occurrences of `hi` with `hello`.
-
-Generated MODIFY operation:
-
-**OP** MODIFY
-
-*SEARCH*
-```
-hi world
-hi there
-```
-*REPLACE*
-```
-hello world
-hello there
-```
-*SEARCH*
-````
-hi world
-```hi world
-````
-*REPLACE*
-````
-hello world
-```hello world
-````
-Explanation：
-1. Consecutive lines are included within a single SEARCH/REPLACE pair.
-2. Since the SEARCH/REPLACE content contains backtick sequences, \
-a longer code block fence is used to ensure proper encapsulation \
-and avoid Markdown parsing issues.
+1. Ensure there is **one blank line** between the starting line \
+`**OP** MODIFY ...` and the SEARCH/REPLACE pairs.
+2. Each SEARCH/REPLACE pair must match the structure shown, with no extra \
+content before or after.
+3. Consecutive lines that are part of the same modification should be included \
+within a single SEARCH/REPLACE pair.
+4. Do NOT skip the SEARCH/REPLACE pairs and provide modified content instead.
 
 ## Create files
 Start with line:
-```
-**OP** CREATE <FILEPATH>
-```
-`<FILEPATH>` is the path of the file to be created and is required.
 
+**OP** CREATE `<FILEPATH>`
+
+`<FILEPATH>` is the path of the file to be created and is required.
 Followed by the content, enclosed in a markdown fenced code block.
 
 ## Delete files
 Just one line:
-```
-**OP** DELETE <FILEPATH>
-```
+
+**OP** DELETE `<FILEPATH>`
+
 `<FILEPATH>` is the path of the file to be deleted and is required.
 
 ## Execute a piece of Elisp code
 Start with line:
-```
+
 **OP** ELISP
-```
+
 Followed by the elisp code snippet, enclosed in a markdown fenced code block.
 ### Example
 **OP** ELISP
 ```elisp
 (insert \"Hello, Emacs!\")
 ```
-")
 
-(defvar aics-system-message-for-complete
-  "You are a highly capable assistant helping users work with Emacs to create \
-and manage content, including programs, documents, papers, and novels.")
+
+"))
 
 (defvar aics-complete-message
   "\nYour task:\n\
@@ -172,34 +142,56 @@ the surrounding text.\n\
 If no suitable content can be suggested, return an empty string.")
 
 ;;;###autoload
-(defun aics-request (request)
-  (let ((gptel--system-message aics-system-message)
-        (prompt (concat (aics--context-info)
-                        "\nUser Request:\n"
-                        request)))
-    (gptel-request prompt
-      :callback
-      (lambda (response info)
-        (if (stringp response)
-            (let ((current-buffer (plist-get info :buffer)))
-              (with-current-buffer current-buffer
-                (aics--process-suggestions-and-apply response)))
-          (message "gptel-request failed with message: %s"
-                   (plist-get info :status)))))))
+(define-minor-mode aics-mode
+  "Minor mode for aics interacting with LLMs."
+  :lighter " aics"
+  :keymap
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c RET") #'aics-send)
+    map)
+  (if aics-mode
+      (progn
+        (message "enable aics mode")
+        (gptel-mode 1))
+    (gptel-mode -1)))
+
+;;;###autoload
+(defun aics-send ()
+  (interactive)
+  (let ((system (concat aics-system-message
+                        "\n\nRequest context:\n\n"
+                        (with-current-buffer "main.cc"
+                          (aics--context-info))
+                        "\n"
+                        "**NOTE**
+When including fenced code blocks in your response, ensure the opening \
+fence is sufficiently long to correctly encapsulate content containing \
+backtick sequences, preventing Markdown parsing issues.\n\n")))
+    (message "[[[%s]]]\n" system)
+    (gptel-request nil :system system)))
+
+;;;###autoload
+(defun aics ()
+  (interactive)
+  (with-current-buffer
+      (get-buffer-create "*aics*")
+    (cond
+     ((eq gptel-default-mode 'text-mode)
+      (text-mode))
+     (t (funcall gptel-default-mode)))
+    (unless aics-mode (aics-mode 1))))
 
 ;;;###autoload
 (defun aics-complete-at-point ()
   (interactive)
-  (let ((gptel--system-message aics-system-message-for-complete)
+  (let ((gptel--system-message aics-system-role)
         (prompt (concat (aics--context-info) aics-complete-message)))
     (message prompt)
     (gptel-request prompt)))
 
 (defun aics--context-info ()
-  (concat (aics--project-directory-info)
-          "\n"
-          (aics--current-buffer-info)
-          "\n"
+  (concat (aics--current-buffer-info)
+          "\n\n"
           (aics--project-buffers-info)))
 
 (defun aics--project-directory-info ()
@@ -255,25 +247,58 @@ If no suitable content can be suggested, return an empty string.")
     (car (project-roots project)))))
 
 (defun aics--current-buffer-info ()
-  (let ((buffer-content (buffer-substring-no-properties (point-min) (point-max))))
-    (concat (aics--current-buffer-filepath-info)
-            (format "Content of the current buffer:\n%s\n"
-                    (aics--make-fenced-code-block buffer-content))
-            (cond ((= (point) (point-min))
-                   "Current cursor is at the beginning of the buffer.\n")
-                  ((= (point) (point-max))
-                   "Current cursor is at the end of the buffer.\n")
-                  (t
-                   (let ((point-prefix-content (aics--point-prefix-content))
-                         (point-suffix-content (aics--point-suffix-content)))
-                     (format "Content fragment before the cursor:\n%s\nContent fragment after the cursor:\n%s\n"
-                             (aics--make-fenced-code-block point-prefix-content)
-                             (aics--make-fenced-code-block point-suffix-content))))))))
+  (concat (format "Current buffer: `%s`  \n" (buffer-name))
+          (aics--buffer-info)
+          "\n"
+          "Fragment before the cursor:  \n"
+          (if (= (point) (point-min))
+              "(cursor is at the beginning of the buffer)  "
+            (let ((content-before-cursor (buffer-substring-no-properties (point-min) (point)))
+                  (fragment-before-cursor (aics--fragment-before-cursor)))
+              (concat
+               (if (equal content-before-cursor fragment-before-cursor)
+                   ""
+                 "\n...\n")
+               (aics--make-fenced-code-block fragment-before-cursor))))
+          "\n"
+          "Fragment after the cursor:  \n"
+          (if (= (point) (point-max))
+              "(cursor is at the end of the buffer)  "
+            (let ((content-after-cursor (buffer-substring-no-properties (point) (point-max)))
+                  (fragment-after-cursor (aics--fragment-after-cursor)))
+              (concat
+               (aics--make-fenced-code-block fragment-after-cursor)
+               (if (equal content-after-cursor fragment-after-cursor)
+                   ""
+                 "\n..."))))))
 
-(defun aics--current-buffer-filepath-info ()
-  (if buffer-file-name
-      (format "Current buffer's filepath: %s\n\n" buffer-file-name)
-    ""))
+(defun aics--buffer-info ()
+  (let ((buffer-content (buffer-substring-no-properties (point-min) (point-max))))
+    (concat (format "Filepath: %s  \n"
+                    (if buffer-file-name
+                        (concat "`" buffer-file-name "`")
+                      "(not associated with a file)"))
+            "Content:  \n"
+            (if buffer-content
+                (aics--make-fenced-code-block buffer-content)
+              "(empty)"))))
+
+(defun aics--flycheck-current-errors ()
+  "Return formatted Flycheck errors in the current buffer as a Markdown unordered list.
+If there are no Flycheck errors, return nil."
+  (when (boundp 'flycheck-current-errors)
+    (if (null flycheck-current-errors)
+        nil
+      (concat "Flycheck Errors of the buffer:\n"
+              (mapconcat
+               (lambda (err)
+                 (format "- Line %d, Column %d (%s): %s"
+                         (flycheck-error-line err)
+                         (or (flycheck-error-column err) 0)
+                         (capitalize (symbol-name (flycheck-error-level err)))
+                         (flycheck-error-message err)))
+               flycheck-current-errors
+               "\n")))))
 
 (defun aics--make-code-fence (content)
   "Generate a code fence that's long enough to encapsulate CONTENT.
@@ -301,7 +326,7 @@ Returns the indented content as a string."
                lines
                "\n")))
 
-(defun aics--point-prefix-content ()
+(defun aics--fragment-before-cursor ()
   (let ((point-pos (point))
         (stop nil)
         (prefix)
@@ -334,7 +359,7 @@ Returns the indented content as a string."
                     (setq stop t))))))))
     prefix))
 
-(defun aics--point-suffix-content ()
+(defun aics--fragment-after-cursor ()
   (let ((point-pos (point))
         (stop nil)
         (suffix)
@@ -368,33 +393,19 @@ Returns the indented content as a string."
     suffix))
 
 (defun aics--project-buffers-info ()
-  "Return formatted information about other buffers in the same project.
-Output format:
-The other buffers of this project:
-
-filepath: xxx
-content:
-```
-<content>
-```
-
-Multiple buffers will be listed sequentially."
   (if-let ((proj (project-current)))
       (let ((buffers (aics--project-buffers))
             info)
         (if buffers
             (progn
-              (setq info "The other buffers of this project:\n\n")
+              (setq info "Other buffers in the same project:\n\n")
               (dolist (buf buffers)
                 (with-current-buffer buf
-                  (setq info (concat info
-                                     "- filepath: " (or buffer-file-name "(no file)") "\n\n"
-                                     "  content:\n"
-                                     (aics--indent
-                                      (aics--make-fenced-code-block
-                                       (buffer-substring-no-properties (point-min) (point-max)))
-                                      2)
-                                     "\n\n"))))
+                  (setq info (concat
+                              info
+                              (format "`%s`:  \n" (buffer-name buf))
+                              (aics--buffer-info)
+                              "\n\n"))))
               info)
           ""))
     ""))
