@@ -46,7 +46,7 @@ needed.
 
 The specific format descriptions for these actions are as follows:
 
-## Modify buffers
+### Modify buffers
 Start with line:
 
 **OP** MODIFY `<NAME>`
@@ -99,7 +99,7 @@ content before or after.
 within a single SEARCH/REPLACE pair.
 4. Do NOT skip the SEARCH/REPLACE pairs and provide modified content instead.
 
-## Create files
+### Create files
 Start with line:
 
 **OP** CREATE `<FILEPATH>`
@@ -107,25 +107,53 @@ Start with line:
 `<FILEPATH>` is the path of the file to be created and is required.
 Followed by the content, enclosed in a markdown fenced code block.
 
-## Delete files
+### Delete files
 Just one line:
 
 **OP** DELETE `<FILEPATH>`
 
 `<FILEPATH>` is the path of the file to be deleted and is required.
 
-## Execute a piece of Elisp code
+### Execute a piece of Elisp code
 Start with line:
 
 **OP** ELISP
 
 Followed by the elisp code snippet, enclosed in a markdown fenced code block.
-### Example
+For example:
+
 **OP** ELISP
 ```elisp
 (insert \"Hello, Emacs!\")
 ```
 
+---
+
+### IMPORTANT: General Rule for Fenced Code Blocks
+
+When generating code blocks, **always** ensure the fence length is adjusted \
+dynamically to be long enough for the content. Avoid relying on a fixed fence \
+length, such as triple backticks, unless it is already adequate.
+
+#### Rules
+
+1. **Inspect Content**: Check the longest sequence of consecutive backticks \
+inside the content.
+2. **Determine Fence Length**: Use opening and closing fences that are at least one \
+backtick longer than the longest sequence in the content.
+3. **Validate Before Returning**: Verify the opening and closing fences length \
+to confirm they meet the rule before submitting your response.
+
+#### Examples
+
+````
+```
+Content with ```
+```
+````
+
+Note: Since the text contains triple backticks, it must be enclosed using at \
+least a quadruple backtick fence.
 
 "))
 
@@ -159,27 +187,25 @@ If no suitable content can be suggested, return an empty string.")
 (defun aics-send ()
   (interactive)
   (let ((system (concat aics-system-message
-                        "\n\nRequest context:\n\n"
+                        "\n\n---\n\nRequest context:\n\n\n"
                         (with-current-buffer "main.cc"
                           (aics--context-info))
-                        "\n"
-                        "**NOTE**
-When including fenced code blocks in your response, ensure the opening \
-fence is sufficiently long to correctly encapsulate content containing \
-backtick sequences, preventing Markdown parsing issues.\n\n")))
+                        "\n")))
     (message "[[[%s]]]\n" system)
     (gptel-request nil :system system)))
 
 ;;;###autoload
 (defun aics ()
   (interactive)
-  (with-current-buffer
-      (get-buffer-create "*aics*")
+  (with-current-buffer (get-buffer-create "*aics*")
     (cond
      ((eq gptel-default-mode 'text-mode)
       (text-mode))
      (t (funcall gptel-default-mode)))
-    (unless aics-mode (aics-mode 1))))
+    (unless aics-mode (aics-mode 1))
+    (if (bobp) (insert (gptel-prompt-prefix-string)))
+    (when (called-interactively-p 'any)
+      (display-buffer (current-buffer) gptel-display-buffer-action))))
 
 ;;;###autoload
 (defun aics-complete-at-point ()
@@ -247,9 +273,9 @@ backtick sequences, preventing Markdown parsing issues.\n\n")))
     (car (project-roots project)))))
 
 (defun aics--current-buffer-info ()
-  (concat (format "Current buffer: `%s`  \n" (buffer-name))
+  (concat (format "Current buffer: `%s`\n\n" (buffer-name))
           (aics--buffer-info)
-          "\n"
+          "\n\n"
           "Fragment before the cursor:  \n"
           (if (= (point) (point-min))
               "(cursor is at the beginning of the buffer)  "
@@ -258,9 +284,9 @@ backtick sequences, preventing Markdown parsing issues.\n\n")))
               (concat
                (if (equal content-before-cursor fragment-before-cursor)
                    ""
-                 "\n...\n")
+                 "...\n")
                (aics--make-fenced-code-block fragment-before-cursor))))
-          "\n"
+          "\n\n"
           "Fragment after the cursor:  \n"
           (if (= (point) (point-max))
               "(cursor is at the end of the buffer)  "
@@ -398,7 +424,7 @@ Returns the indented content as a string."
             info)
         (if buffers
             (progn
-              (setq info "Other buffers in the same project:\n\n")
+              (setq info "\nOther buffers in the same project:\n\n")
               (dolist (buf buffers)
                 (with-current-buffer buf
                   (setq info (concat
