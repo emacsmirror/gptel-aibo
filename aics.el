@@ -22,6 +22,7 @@
 ;;; Code:
 
 (require 'gptel)
+(require 'gptel-context)
 
 (defvar aics-system-role
   "You are an expert assistant specializing in helping users with Emacs for \
@@ -169,6 +170,15 @@ the surrounding text.\n\
 4. Do not call tools or ask questions to obtain additional information. \
 If no suitable content can be suggested, return an empty string.")
 
+(defvar-local aics--ui-buffer nil
+  "Aics current ui buffer.")
+
+(defvar-local aics--working-buffer nil
+  "Aics working buffer name.")
+
+(defvar-local aics--from-gptel-mode nil
+  "If this from gptel-mode.")
+
 ;;;###autoload
 (define-minor-mode aics-mode
   "Minor mode for aics interacting with LLMs."
@@ -176,31 +186,96 @@ If no suitable content can be suggested, return an empty string.")
   :keymap
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c RET") #'aics-send)
+    (define-key map (kbd "C-c !") #'aics-parse-last-suggestions-and-apply)
     map)
   (if aics-mode
       (progn
-        (message "enable aics mode")
-        (gptel-mode 1))
-    (gptel-mode -1)))
+        (if gptel-mode
+            (setq aics--from-gptel-mode gptel-mode)
+          (gptel-mode 1))
+        (setq-local gptel--system-message aics-system-message)
+        (setq aics--ui-buffer (current-buffer))
+        (setq aics--working-buffer (other-buffer nil t))
+        ;; (setq header-line-format
+        ;;       (list '(:eval (concat "<"
+        ;;                             (buffer-name aics--working-buffer)
+        ;;                             ">"))))
+        (add-hook 'buffer-list-update-hook #'aics-mode-check-buffer-list nil t)
+        (message "aics-mode enabled"))
+    (unless aics--from-gptel-mode
+      (gptel-mode -1))
+    (remove-hook 'buffer-list-update-hook #'aics-mode-check-buffer-list)
+    (message "aics-mode disabled")))
+
+(defun aics-mode-check-buffer-list ()
+  (when (eq aics--ui-buffer (car (buffer-list)))
+    (setq aics--working-buffer (other-buffer nil t))))
+
+(defun aics-context--wrap (message contexts)
+  (let ((context-string (concat (gptel-context--string contexts)
+                                "\n\n---\n\nRequest context:\n\n\n"
+                                (aics-context--info aics--working-buffer))))
+    (message "Merged Context: %s" context-string)
+    (if (> (length context-string) 0)
+        (pcase-exhaustive gptel-use-context
+          ('system (concat message "\n\n" context-string))
+          ('user   (concat context-string "\n\n" message))
+          ('nil    message))
+      message)))
+
+  ;; (let ((system (concat aics-system-message
+  ;;                       "\n\n---\n\nRequest context:\n\n\n"
+  ;;                       (with-current-buffer aics--working-buffer
+  ;;                         (aics-context--info))
+  ;;                       "\n")))
+  ;; ;;   (message "[[[%s]]]\n" system)
+
+  ;; ;;   ;; (unless (use-region-p)
+  ;; ;;   ;;   (let ((begin nil))
+  ;; ;;   ;;     (save-excursion
+  ;; ;;   ;;       (save-restriction
+  ;; ;;   ;;         (while (not begin)
+  ;; ;;   ;;           (let ((resp (text-property-search-backward 'gptel 'response t)))
+  ;; ;;   ;;             (if (not resp)
+  ;; ;;   ;;                 (setq begin (point-min))
+  ;; ;;   ;;               (unless (eq (get-char-property (point) 'aics--working-buffer)
+  ;; ;;   ;;                           aics--working-buffer)
+  ;; ;;   ;;                 (setq begin (prop-match-end resp))))))))
+  ;; ;;   ;;     (narrow-to-region begin (point)))))
 
 ;;;###autoload
 (defun aics-send ()
   (interactive)
-  (let ((system (concat aics-system-message
-                        "\n\n---\n\nRequest context:\n\n\n"
-                        (with-current-buffer "main.cc"
-                          (aics--context-info))
-                        "\n")))
-    (message "[[[%s]]]\n" system)
-    (gptel-request nil :system system)))
+
+  (when (not (buffer-live-p aics--working-buffer))
+    (setq aics--working-buffer (other-buffer t nil)))
+
+  (let ((gptel-context--alist (cons (cons aics--working-buffer nil)
+                                    gptel-context--alist))
+        (gptel-context-wrap-function #'aics-context--wrap))
+    (gptel-request nil
+      :stream gptel-stream
+      :fsm (gptel-make-fsm :handlers gptel-send--handlers))))
 
 ;;;###autoload
-(defun aics ()
-  (interactive)
-  (with-current-buffer (get-buffer-create "*aics*")
-    (cond
+(defun aics (name)
+  (interactive
+   (let* ((backend (default-value 'gptel-backend))
+          (backend-name
+           (format "*aics-%s*" (gptel-backend-name backend))))
+     (list (read-buffer
+            "Create or choose aics buffer: "
+            backend-name
+            nil
+            (lambda (b)
+              (and-let* ((buf (get-buffer (or (car-safe b) b))))
+                (buffer-local-value 'aics-mode buf)))))))
+  (with-current-buffer (get-buffer-create name)
+    (cond ;Set major mode
+     ((eq major-mode gptel-default-mode))
      ((eq gptel-default-mode 'text-mode)
-      (text-mode))
+      (text-mode)
+      (visual-line-mode 1))
      (t (funcall gptel-default-mode)))
     (unless aics-mode (aics-mode 1))
     (if (bobp) (insert (gptel-prompt-prefix-string)))
@@ -211,14 +286,15 @@ If no suitable content can be suggested, return an empty string.")
 (defun aics-complete-at-point ()
   (interactive)
   (let ((gptel--system-message aics-system-role)
-        (prompt (concat (aics--context-info) aics-complete-message)))
+        (prompt (concat (aics-context--info) aics-complete-message)))
     (message prompt)
     (gptel-request prompt)))
 
-(defun aics--context-info ()
-  (concat (aics--current-buffer-info)
-          "\n\n"
-          (aics--project-buffers-info)))
+(defun aics-context--info (&optional buffer)
+  (with-current-buffer (or buffer (current-buffer))
+    (concat (aics--current-buffer-info)
+            "\n\n"
+            (aics--project-buffers-info))))
 
 (defun aics--project-directory-info ()
   "Return project directory information based on current location."
@@ -451,13 +527,30 @@ If the current buffer does not belong to a project, return an empty list."
                   (equal (project-root buf-project) project-root)))))
        (buffer-list)))))
 
-(defun aics--process-suggestions-and-apply (input)
-  "Parse the INPUT string for OP commands and apply the actions."
-  (let ((parse-result (aics--parse-suggestions-ops input)))
-    (if (eq (car parse-result) 'error)
-        ;; If parsing fails, directly output the error message
-        (message "Error parsing suggestions: %s" (cadr parse-result))
-      ;; Successfully parsed, start executing operations
+(defun aics-parse-last-suggestions-and-apply ()
+  (interactive)
+  (goto-char (point-max))
+  (if-let ((prop (text-property-search-backward 'gptel 'response t)))
+      (let* ((begin(prop-match-beginning prop))
+             (end (prop-match-end prop))
+             (response (buffer-substring-no-properties begin end)))
+        (aics-parse-suggestions-and-apply response))
+    (message "No response found.")))
+
+(defvar aics--delete-confirmation nil
+  "Stores user confirmation preference for file deletion.")
+
+(defun aics-parse-suggestions-and-apply (response)
+  "Parse the RESPONSE string for OP commands and apply the actions."
+  ;; Reset deletion confirmation state for this batch
+  (setq aics--delete-confirmation nil)
+  (let ((parse-result (aics--parse-suggestions-ops response)))
+    (cond
+     ((eq (car parse-result) 'error)
+      (message "Error parsing suggestions: %s" (cadr parse-result)))
+     ((null parse-result)
+      (message "No operations found in response"))
+     (t
       (let ((ops parse-result))
         (message "Applying OPs: %s" ops)
         (catch 'error
@@ -466,21 +559,21 @@ If the current buffer does not belong to a project, return an empty list."
               (condition-case err
                   ;; Call the corresponding helper function based on the operation type
                   (cond
-                   ((string= op-type "MODIFY") (aics--apply-modify-op op))
-                   ((string= op-type "CREATE") (aics--apply-create-op op))
-                   ((string= op-type "DELETE") (aics--apply-delete-op op))
-                   ((string= op-type "ELISP") (aics--apply-elisp-op op))
+                   ((eq op-type 'MODIFY) (aics--apply-modify-op op))
+                   ((eq op-type 'CREATE) (aics--apply-create-op op))
+                   ((eq op-type 'DELETE) (aics--apply-delete-op op))
+                   ((eq op-type 'ELISP) (aics--apply-elisp-op op))
                    (t (error "Unknown operation type: %s" op-type)))
                 ;; Catch errors during execution
                 (error
                  (message "Error applying OP: %s" (error-message-string err))
-                 (throw 'error nil)))))
-          (message "All operations applied successfully."))))))
+                 nil))))
+          (message "All operations applied successfully.")))))))
 
-(defun aics--parse-suggestions-ops (suggestions)
-  "Parse SUGGESTIONS string into a list of operations.
+(defun aics--parse-suggestions-ops (response)
+  "Parse RESPONSE string into a list of operations.
 Returns ops list on success, or (error . message) on failure."
-  (let ((lines (split-string suggestions "\n"))
+  (let ((lines (split-string response "\n"))
         (ops nil)
         (parse-error nil)) ;; Track parsing errors
 
@@ -488,55 +581,59 @@ Returns ops list on success, or (error . message) on failure."
       (let ((line (car lines)))
         (if (string-match "^\\*\\*OP\\*\\* \\(\\w+\\)\\(?: \\(.*\\)\\)?" line)
             ;; Process matched OP line
-            (let ((op-type (match-string 1 line))
-                  (filepath (match-string 2 line))
-                  (next-lines (cdr lines)))
-              (let ((op-parse-result
-                     (pcase op-type
-                       ("MODIFY" (aics--parse-modify-op filepath next-lines))
-                       ("CREATE" (aics--parse-create-op filepath next-lines))
-                       ("DELETE" (aics--make-delete-op filepath next-lines))
-                       ("ELISP" (aics--parse-elisp-op next-lines))
-                       (_ (list 'error (format "Unknown operation type: %s" op-type) lines)))))
-                (if (eq (car op-parse-result) 'error)
-                    (setq parse-error op-parse-result)
-                  (push (car op-parse-result) ops)
-                  ;; Update `lines` with remaining lines from `op-parse-result`
-                  (setq lines (cdr op-parse-result)))))
-          ;; Else: Skip non-OP lines
+            (let* ((op (match-string 1 line))
+                   (target (aics--markdown-unbacktick (match-string 2 line)))
+                   (next-lines (cdr lines))
+                   (op-parse-result
+                    (pcase op
+                      ("MODIFY" (aics--parse-modify-op target next-lines))
+                      ("CREATE" (aics--parse-create-op target next-lines))
+                      ("DELETE" (aics--make-delete-op target next-lines))
+                      ("ELISP" (aics--parse-elisp-op next-lines))
+                      (_ (list 'error (format "Unknown operation type: %s" op) lines)))))
+              (if (eq (car op-parse-result) 'error)
+                  (setq parse-error op-parse-result)
+                (push (car op-parse-result) ops)
+                ;; Update `lines` with remaining lines from `op-parse-result`
+                (setq lines (cdr op-parse-result))))
           (setq lines (cdr lines)))))
-
     (or parse-error (nreverse ops))))
 
-(defun aics--parse-modify-op (filepath lines)
-  "Parse a MODIFY operation from FILEPATH and LINES.
+(defun aics--markdown-unbacktick (str)
+  (if (and (string-match "^\\(`+\\)\\(.*\\)\\1$" str)
+           (> (length (match-string 1 str)) 0))
+      (match-string 2 str)
+    str))
+
+(defun aics--parse-modify-op (target lines)
+  "Parse a MODIFY operation from TARGET and LINES.
 Returns (op-object . remain-lines) on success,
 or (list 'error message remain-lines) on failure."
   (let ((result (aics--parse-search-replace-pairs lines)))
     (if (eq (car result) 'error)
         result ;; Directly return the error result
       (cons `((:type . MODIFY)
-              (:filepath . ,filepath)
-              (:pairs . ,(car result)))
+              (:target . ,target)
+              (:replacements . ,(car result)))
             (cdr result)))))
 
-(defun aics--parse-create-op (filepath lines)
-  "Parse a CREATE operation from FILEPATH and LINES.
+(defun aics--parse-create-op (target lines)
+  "Parse a CREATE operation from TARGET and LINES.
 Returns (op-object . remain-lines) on success,
 or (list 'error message remain-lines) on failure."
   (let ((result (aics--parse-code-block lines)))
     (if (eq (car result) 'error)
         result
       (cons `((:type . CREATE)
-              (:filepath . ,filepath)
+              (:target . ,target)
               (:content . ,(car result)))
             (cdr result)))))
 
-(defun aics--make-delete-op (filepath lines)
-  "Create a DELETE operation from FILEPATH.
+(defun aics--make-delete-op (target lines)
+  "Create a DELETE operation from TARGET.
 Always succeeds, returning (op-object . remain-lines)."
   (cons `((:type . DELETE)
-          (:filepath . ,filepath))
+          (:target . ,target))
         lines))
 
 (defun aics--parse-elisp-op (lines)
@@ -552,9 +649,9 @@ or (list 'error message remain-lines) on failure."
 
 (defun aics--parse-search-replace-pairs (lines)
   "Parse search/replace pairs from LINES.
-Returns (pairs . remaining-lines) on success,
+Returns (replacements . remaining-lines) on success,
 or (error . message) on failure."
-  (let ((pairs nil)
+  (let ((replacements nil)
         (parse-error nil)
         (parse-end nil)) ;; Loop control
     (while (and lines (not parse-error) (not parse-end))
@@ -564,7 +661,7 @@ or (error . message) on failure."
 
       ;; If no more lines or current line is not *SEARCH*
       (if (or (null lines) (not (string= (car lines) "*SEARCH*")))
-          (if (null pairs)
+          (if (null replacements)
               (setq parse-error (list 'error  "No valid search/replace pairs found" lines))
             (setq parse-end t)) ;; Exit loop if pairs are not empty
         ;; Found *SEARCH*, parse the search block
@@ -585,14 +682,14 @@ or (error . message) on failure."
                   (if (eq (car replace-parse-result) 'error)
                       (setq parse-error replace-parse-result)
                     ;; Add parsed pair
-                    (push (cons search-content (car replace-parse-result)) pairs)
+                    (push (cons search-content (car replace-parse-result)) replacements)
                     ;; Update lines to after replace block
                     (setq lines (cdr replace-parse-result))))))))))
 
     ;; Return results or error
     (if parse-error
         parse-error
-      (cons (nreverse pairs) lines))))
+      (cons (nreverse replacements) lines))))
 
 (defun aics--parse-code-block (lines)
   "Parse a fenced code block from LINES.
@@ -630,46 +727,68 @@ Empty lines before the start fence are ignored."
 
 (defun aics--apply-modify-op (op)
   "Apply a MODIFY operation from OP."
-  (let ((file (alist-get :filepath op))
-        (pairs (alist-get :pairs op)))
-    (message "Applying MODIFY on %s" file)
-    (unless (file-exists-p file)
-      (error "File not found: %s" file))
-    (with-current-buffer (find-file-noselect file)
-      (save-excursion
+  (let ((buffer-name (alist-get :target op))
+        (replacements (alist-get :replacements op)))
+    (message "Applying MODIFY on buffer: %s" buffer-name)
+    (with-current-buffer (or (get-buffer buffer-name)
+                             (error "Buffer not found: %s" buffer-name))
+      (goto-char (point-min))
+      (dolist (search-replace-pair replacements)
         (goto-char (point-min))
-        (dolist (pair pairs)
-          (let ((search (car pair))
-                (replace (cdr pair)))
-            (message "Searching for: '%s' to replace with: '%s'" search replace)
-            (unless (search-forward search nil t)
-              (error "Search string '%s' not found in file: %s" search file))
-            (replace-match replace t t))))
-        (save-buffer))))
+        (let ((search (car search-replace-pair))
+              (replace (cdr search-replace-pair)))
+          (unless (search-forward search nil t)
+            (error "Searching fail: [%s]" search))
+          (replace-match replace t t)))
+      (when (buffer-file-name)
+        (save-buffer)))))
 
 (defun aics--apply-create-op (op)
-  "Apply a CREATE operation from OP."
-  (let ((file (alist-get :filepath op))
+  "Apply a CREATE operation from OP.
+Creates a new buffer with the specified content and immediately saves it to file,
+without switching to or closing the buffer."
+  (let ((file (alist-get :target op))
         (content (alist-get :content op)))
-    (message "Applying CREATE on %s" file)
+    (message "Creating and saving file: %s" file)
     (when (file-exists-p file)
       (error "File already exists: %s" file))
-    (with-temp-file file
-      (insert content))))
+    (with-current-buffer (find-file-noselect file)
+      (insert content)
+      (save-buffer))))
 
 (defun aics--apply-delete-op (op)
-  "Apply a DELETE operation from OP."
-  (let ((file (alist-get :filepath op)))
+  "Apply a DELETE operation from OP with user confirmation."
+  (let ((file (alist-get :target op)))
     (message "Applying DELETE on %s" file)
     (unless (file-exists-p file)
       (error "File not found: %s" file))
-    (delete-file file)))
+
+    (if-let ((file-buffer (get-file-buffer file)))
+        (kill-buffer file-buffer))
+
+    (cond
+     ((eq aics--delete-confirmation 'never)
+      (message "File deletion refused by user: %s" file))
+     ((eq aics--delete-confirmation 'always)
+      (delete-file file))
+     (t
+      (let ((response (read-char-choice
+                       (format "Delete file %s? (y)es/(n)o/(a)lways/(N)ever: " file)
+                       '(?y ?n ?a ?N))))
+        (pcase response
+          (?y (delete-file file))
+          (?n (message "File deletion refused by user: %s" file))
+          (?a (setq aics--delete-confirmation 'always)
+              (delete-file file))
+          (?N (setq aics--delete-confirmation 'never)
+              (message "File deletion refused by user: %s" file))))))))
 
 (defun aics--apply-elisp-op (op)
   "Apply an ELISP operation from OP."
   (let ((content (alist-get :content op)))
-    (message "Evaluating ELISP: %s" content)
-    (eval (read content))))
+    (message "Evaluating ELISP(SKIPPED): %s" content)
+    ;;(eval (read content))
+    ))
 
 (provide 'aics)
 ;;; aics.el ends here
