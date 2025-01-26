@@ -47,7 +47,8 @@
           "Fragment before the cursor:  \n"
           (if (= (point) (point-min))
               "(cursor is at the beginning of the buffer)  "
-            (let ((content-before-cursor (buffer-substring-no-properties (point-min) (point)))
+            (let ((content-before-cursor
+                   (buffer-substring-no-properties (point-min) (point)))
                   (fragment-before-cursor (aics-context--fragment-before-cursor)))
               (concat
                (if (equal content-before-cursor fragment-before-cursor)
@@ -58,7 +59,8 @@
           "Fragment after the cursor:  \n"
           (if (= (point) (point-max))
               "(cursor is at the end of the buffer)  "
-            (let ((content-after-cursor (buffer-substring-no-properties (point) (point-max)))
+            (let ((content-after-cursor
+                   (buffer-substring-no-properties (point) (point-max)))
                   (fragment-after-cursor (aics-context--fragment-after-cursor)))
               (concat
                (aics-context--make-fenced-code-block fragment-after-cursor)
@@ -67,7 +69,14 @@
                  "\n..."))))))
 
 (defun aics-context--buffer-info ()
-  (let ((buffer-content (buffer-substring-no-properties (point-min) (point-max))))
+  "Get buffer information including file path and content.
+Returns a formatted string containing:
+1. The buffer's file path (if associated with a file)
+2. The buffer's content wrapped in a fenced code block
+If the buffer is not associated with a file, indicates this.
+If the buffer is empty, indicates this as well."
+  (let ((buffer-content
+         (buffer-substring-no-properties (point-min) (point-max))))
     (concat (format "Filepath: %s  \n"
                     (if buffer-file-name
                         (concat "`" buffer-file-name "`")
@@ -97,21 +106,33 @@
     ""))
 
 (defun aics-context--project-buffers ()
-  "Get a list of buffers belonging to the same project as the current buffer, excluding the current buffer itself.
-If the current buffer does not belong to a project, return an empty list."
+  "Get buffers in same project as current buffer, excluding current buffer.
+Return a list of buffers that belong to the same project as the current
+buffer, excluding the current buffer itself. If the current buffer does
+not belong to a project, return an empty list."
   (when-let ((project-current (project-current)))
-    (let ((project-root (project-root project-current))
+    (let ((project-root (aics-context--project-root project-current))
           (current-buffer (current-buffer)))
       (seq-filter
        (lambda (buf)
-         (and (not (eq buf current-buffer)) ; Exclude the current buffer
+         (and (not (eq buf current-buffer)) ; Exclude current buffer
               (buffer-file-name buf)
               (with-current-buffer buf
                 (when-let ((buf-project (project-current)))
-                  (equal (project-root buf-project) project-root)))))
+                  (equal (aics-context--project-root buf-project)
+                         project-root)))))
        (buffer-list)))))
 
 (defun aics-context--fragment-before-cursor ()
+  "Get a meaningful fragment of text before the cursor.
+
+The function collects text starting from the cursor position and continues
+collecting lines backwards until one of the following conditions is met:
+1. Reaches the beginning of buffer
+2. Finds 3 non-blank lines that form a unique prefix in the buffer
+3. The collected text forms a unique pattern in the buffer
+
+Returns a string containing the collected text fragment."
   (let ((point-pos (point))
         (stop nil)
         (prefix)
@@ -145,6 +166,15 @@ If the current buffer does not belong to a project, return an empty list."
     prefix))
 
 (defun aics-context--fragment-after-cursor ()
+  "Get a meaningful fragment of text after the cursor.
+
+The function collects text starting from the cursor position and continues
+collecting lines until one of the following conditions is met:
+1. Reaches the end of buffer
+2. Finds 3 non-blank lines that form a unique prefix in the buffer
+3. The collected text forms a unique pattern in the buffer
+
+Returns a string containing the collected text fragment."
   (let ((point-pos (point))
         (stop nil)
         (suffix)
@@ -161,7 +191,9 @@ If the current buffer does not belong to a project, return an empty list."
             (setq stop t)
           (progn
             (forward-line 1)
-            (setq suffix (buffer-substring-no-properties point-pos (line-end-position)))
+            (setq suffix
+                  (buffer-substring-no-properties
+                   point-pos (line-end-position)))
             (let ((line (buffer-substring-no-properties
                          (line-beginning-position) (line-end-position))))
               (unless (string-match-p "\\`[[:space:]]*\\'" line)
@@ -178,9 +210,13 @@ If the current buffer does not belong to a project, return an empty list."
     suffix))
 
 (defun aics-context--project-current-directory-info ()
-  "Return a string of current directory listing if in a project, else empty string."
+  "Return current directory listing as a string if in a project.
+If not in a project, return empty string.
+The listing includes files and directories, with '/' appended to directory
+names."
   (if-let ((proj (project-current)))
-      (let ((current-dir (file-name-directory (or buffer-file-name default-directory))))
+      (let ((current-dir (file-name-directory
+                          (or buffer-file-name default-directory))))
         (with-temp-buffer
           (insert "Files in the project's current directory:\n```\n")
           (dolist (file (directory-files current-dir))
@@ -194,6 +230,8 @@ If the current buffer does not belong to a project, return an empty list."
     ""))
 
 (defun aics-context--project-root (project)
+  "Get the root directory of PROJECT.
+Returns: The project root directory as a string, or nil if not found."
   (cond
    ((fboundp 'project-root)
     (project-root project))
@@ -207,14 +245,16 @@ If the current buffer does not belong to a project, return an empty list."
             (current-info (aics-context--project-current-directory-info)))
         (if (string-empty-p top-info)
             ""
-          (if (string= (file-name-directory (or buffer-file-name default-directory))
+          (if (string= (file-name-directory
+                        (or buffer-file-name default-directory))
                        (aics-context--project-root (project-current)))
               top-info
             (concat top-info "\n" current-info))))
     ""))
 
 (defun aics-context--project-top-directory-info ()
-  "Return a string of top-level directory listing if in a project, else empty string."
+  "Return formatted string of top-level directory listing.
+If in a project, returns the listing, else returns empty string."
   (if-let ((proj (project-current)))
       (let ((project-root (aics-context--project-root proj)))
         (with-temp-buffer
@@ -236,13 +276,19 @@ The fence is generated using `aics-context--make-code-fence' function."
     (concat fence "\n" content "\n" fence)))
 
 (defun aics-context--make-code-fence (content)
-  "Generate a code fence that's long enough to encapsulate CONTENT.
-The fence will be one backtick longer than the longest sequence of backticks in CONTENT,
-with a minimum of 3 backticks."
+  "Generate a code fence string that safely encapsulates CONTENT.
+The fence length is determined by:
+1. The longest sequence of consecutive backticks in CONTENT
+2. Always at least one backtick longer than the longest sequence
+3. Minimum length of 3 backticks
+
+CONTENT: String to be wrapped in code fence
+Returns: String containing the appropriate number of backticks"
   (let ((max-backticks 0)
         (start 0))
     (while (string-match "`+" content start)
-      (setq max-backticks (max max-backticks (- (match-end 0) (match-beginning 0))))
+      (setq max-backticks (max max-backticks
+                               (- (match-end 0) (match-beginning 0))))
       (setq start (match-end 0)))
     (make-string (max 3 (1+ max-backticks)) ?`)))
 
@@ -256,8 +302,14 @@ Returns the indented content as a string."
                "\n")))
 
 (defun aics-context--flycheck-current-errors ()
-  "Return formatted Flycheck errors in the current buffer as a Markdown unordered list.
-If there are no Flycheck errors, return nil."
+  "Return Flycheck errors formatted as a Markdown unordered list.
+If there are no Flycheck errors, return nil. Each error is formatted as:
+- Line X, Column Y (Level): Error message
+where:
+  X is the line number
+  Y is the column number (0 if not available)
+  Level is the error level (capitalized)
+  Error message is the error description"
   (when (boundp 'flycheck-current-errors)
     (if (null flycheck-current-errors)
         nil

@@ -15,9 +15,10 @@
 ;;
 ;;; Commentary:
 ;;
-;;  AICS is an AI-powered writing assistant that helps users create and manage content
-;;  in Emacs, including programs, documents, papers, and novels. It provides various
-;;  operations like buffer modifications, file creation/deletion, and Elisp execution.
+;;  AICS is an AI-powered writing assistant that helps users create and manage
+;;  content in Emacs, including programs, documents, papers, and novels. It
+;;  provides various operations like buffer modifications, file creation and
+;;  deletion, and Elisp execution.
 ;;
 ;;; Code:
 
@@ -207,11 +208,13 @@ If no suitable content can be suggested, return an empty string.")
     (message "aics-mode disabled")))
 
 (defun aics-mode--check-buffer-list ()
+  "Check and update the working buffer for AICS mode."
   (when (eq aics--ui-buffer (car (buffer-list)))
     (setq aics-context--working-buffer (other-buffer nil t))))
 
 ;;;###autoload
 (defun aics-send ()
+  "Send the current context and request to GPT for processing."
   (interactive)
 
   (when (not (buffer-live-p aics-context--working-buffer))
@@ -228,6 +231,7 @@ If no suitable content can be suggested, return an empty string.")
 
 ;;;###autoload
 (defun aics (name)
+  "Create or switch to an AICS buffer with NAME."
   (interactive
    (let* ((backend (default-value 'gptel-backend))
           (backend-name
@@ -253,6 +257,7 @@ If no suitable content can be suggested, return an empty string.")
 
 ;;;###autoload
 (defun aics-complete-at-point ()
+  "Complete text at point using LLM suggestions."
   (interactive)
   (let ((gptel--system-message aics--system-role)
         (prompt (concat (aics-context--info) aics--complete-message)))
@@ -295,3 +300,7 @@ See `gptel--url-get-response' for details."
 
 (provide 'aics)
 ;;; aics.el ends here
+
+;; Local Variables:
+;; flycheck-disabled-checkers: (emacs-lisp-package)
+;; End:

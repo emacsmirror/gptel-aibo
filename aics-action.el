@@ -14,6 +14,18 @@
 (require 'text-property-search)
 
 (defun aics--parse-last-suggestions-and-apply ()
+  "Parse and apply the last GPT response in current buffer.
+This function searches backward from the end of buffer for the last
+GPT response (marked with ''gptel ''response text property), extracts
+its content, and applies any valid operations found in the response.
+
+Operations can include:
+- MODIFY: Modify buffer content
+- CREATE: Create new files
+- DELETE: Delete files
+- ELISP: Execute Elisp code
+
+See `aics--parse-suggestions-and-apply' for implementation details."
   (interactive)
   (goto-char (point-max))
   (if-let ((prop (text-property-search-backward 'gptel 'response t)))
@@ -43,7 +55,6 @@
           (dolist (op ops)
             (let ((op-type (alist-get :type op)))
               (condition-case err
-                  ;; Call the corresponding helper function based on the operation type
                   (cond
                    ((eq op-type 'MODIFY) (aics--apply-modify-op op))
                    ((eq op-type 'CREATE) (aics--apply-create-op op))
@@ -76,7 +87,8 @@ Returns ops list on success, or (error . message) on failure."
                       ("CREATE" (aics--parse-create-op target next-lines))
                       ("DELETE" (aics--make-delete-op target next-lines))
                       ("ELISP" (aics--parse-elisp-op next-lines))
-                      (_ (list 'error (format "Unknown operation type: %s" op) lines)))))
+                      (_ (list 'error (format "Unknown operation type: %s" op)
+                               lines)))))
               (if (eq (car op-parse-result) 'error)
                   (setq parse-error op-parse-result)
                 (push (car op-parse-result) ops)
@@ -86,6 +98,7 @@ Returns ops list on success, or (error . message) on failure."
     (or parse-error (nreverse ops))))
 
 (defun aics--markdown-unbacktick (str)
+  "Remove markdown code block backticks from STR."
   (if (and (string-match "^\\(`+\\)\\(.*\\)\\1$" str)
            (> (length (match-string 1 str)) 0))
       (match-string 2 str)
@@ -94,7 +107,7 @@ Returns ops list on success, or (error . message) on failure."
 (defun aics--parse-modify-op (target lines)
   "Parse a MODIFY operation from TARGET and LINES.
 Returns (op-object . remain-lines) on success,
-or (list 'error message remain-lines) on failure."
+or (list ''error message remain-lines) on failure."
   (let ((result (aics--parse-search-replace-pairs lines)))
     (if (eq (car result) 'error)
         result ;; Directly return the error result
@@ -106,7 +119,7 @@ or (list 'error message remain-lines) on failure."
 (defun aics--parse-create-op (target lines)
   "Parse a CREATE operation from TARGET and LINES.
 Returns (op-object . remain-lines) on success,
-or (list 'error message remain-lines) on failure."
+or (list ''error message remain-lines) on failure."
   (let ((result (aics--parse-code-block lines)))
     (if (eq (car result) 'error)
         result
@@ -116,7 +129,7 @@ or (list 'error message remain-lines) on failure."
             (cdr result)))))
 
 (defun aics--make-delete-op (target lines)
-  "Create a DELETE operation from TARGET.
+  "Create a DELETE operation from TARGET and LINES.
 Always succeeds, returning (op-object . remain-lines)."
   (cons `((:type . DELETE)
           (:target . ,target))
@@ -125,7 +138,7 @@ Always succeeds, returning (op-object . remain-lines)."
 (defun aics--parse-elisp-op (lines)
   "Parse an ELISP operation from LINES.
 Returns (op-object . remain-lines) on success,
-or (list 'error message remain-lines) on failure."
+or (list ''error message remain-lines) on failure."
   (let ((result (aics--parse-code-block lines)))
     (if (eq (car result) 'error)
         (list 'error (cadr result) (caddr result))
@@ -148,7 +161,8 @@ or (error . message) on failure."
       ;; If no more lines or current line is not *SEARCH*
       (if (or (null lines) (not (string= (car lines) "*SEARCH*")))
           (if (null replacements)
-              (setq parse-error (list 'error  "No valid search/replace pairs found" lines))
+              (setq parse-error
+                    (list 'error  "No valid search/replace pairs found" lines))
             (setq parse-end t)) ;; Exit loop if pairs are not empty
         ;; Found *SEARCH*, parse the search block
         (let ((search-parse-result (aics--parse-code-block (cdr lines))))
@@ -163,12 +177,16 @@ or (error . message) on failure."
               ;; Check for *REPLACE* line
               (if (or (null remain-lines)
                       (not (string= (car remain-lines) "*REPLACE*")))
-                  (setq parse-error (list 'error "Expected *REPLACE* after search block" remain-lines))
-                (let ((replace-parse-result (aics--parse-code-block (cdr remain-lines))))
+                  (setq parse-error
+                        (list 'error "Expected *REPLACE* after search block"
+                              remain-lines))
+                (let ((replace-parse-result
+                       (aics--parse-code-block (cdr remain-lines))))
                   (if (eq (car replace-parse-result) 'error)
                       (setq parse-error replace-parse-result)
                     ;; Add parsed pair
-                    (push (cons search-content (car replace-parse-result)) replacements)
+                    (push (cons search-content (car replace-parse-result))
+                          replacements)
                     ;; Update lines to after replace block
                     (setq lines (cdr replace-parse-result))))))))))
 
@@ -180,35 +198,28 @@ or (error . message) on failure."
 (defun aics--parse-code-block (lines)
   "Parse a fenced code block from LINES.
 Returns (content . remaining-lines) on success,
-or (error . message) on failure.
-A fenced code block starts with a line of three or more backticks and ends with a matching line.
-Empty lines before the start fence are ignored."
+or (error . message) on failure."
   (if (null lines)
       (list 'error "Empty input when expecting code block" lines)
-    (let ((start-fence-regex "^\\(`\\{3,\\}\\)")) ; Simplified regex for fences
-      ;; Skip leading empty lines
+    (let ((start-fence-regex "^\\(`\\{3,\\}\\)"))
       (while (and lines (string-blank-p (car lines)))
         (setq lines (cdr lines)))
-      ;; Check for the start fence
       (if (null lines)
           (list 'error "Empty input after skipping empty lines" lines)
         (if (not (string-match start-fence-regex (car lines)))
             (list 'error "Expected code block start fence" lines)
-          (let ((fence (match-string 1 (car lines))) ; Capture the exact backtick sequence
-                (lines (cdr lines)) ; Skip the start fence
+          (let ((fence (match-string 1 (car lines)))
+                (lines (cdr lines))
                 (content '())
                 found-end)
-            ;; Collect content until the matching end fence is found
             (while (and lines (not found-end))
-              (let ((line (car lines))) ; Localize current line
-                (if (string= line fence) ; Match exact fence for the end
+              (let ((line (car lines)))
+                (if (string= line fence)
                     (setq found-end t)
                   (push line content)
                   (setq lines (cdr lines)))))
-            ;; Check if the end fence was found
             (if (not found-end)
                 (list 'error "Unclosed code block" lines)
-              ;; Return parsed content and remaining lines
               (cons (string-join (nreverse content) "\n") (cdr lines)))))))))
 
 (defun aics--apply-modify-op (op)
@@ -231,8 +242,8 @@ Empty lines before the start fence are ignored."
 
 (defun aics--apply-create-op (op)
   "Apply a CREATE operation from OP.
-Creates a new buffer with the specified content and immediately saves it to file,
-without switching to or closing the buffer."
+Creates a new buffer with the specified content and immediately saves it to
+file, without switching to or closing the buffer."
   (let ((file (alist-get :target op))
         (content (alist-get :content op)))
     (message "Creating and saving file: %s" file)
@@ -258,9 +269,10 @@ without switching to or closing the buffer."
      ((eq aics--delete-confirmation 'always)
       (delete-file file))
      (t
-      (let ((response (read-char-choice
-                       (format "Delete file %s? (y)es/(n)o/(a)lways/(N)ever: " file)
-                       '(?y ?n ?a ?N))))
+      (let ((response
+             (read-char-choice
+              (format "Delete file %s? (y)es/(n)o/(a)lways/(N)ever: " file)
+              '(?y ?n ?a ?N))))
         (pcase response
           (?y (delete-file file))
           (?n (message "File deletion refused by user: %s" file))
