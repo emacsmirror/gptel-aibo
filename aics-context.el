@@ -301,28 +301,5 @@ Returns the indented content as a string."
                lines
                "\n")))
 
-(defun aics-context--flycheck-current-errors ()
-  "Return Flycheck errors formatted as a Markdown unordered list.
-If there are no Flycheck errors, return nil. Each error is formatted as:
-- Line X, Column Y (Level): Error message
-where:
-  X is the line number
-  Y is the column number (0 if not available)
-  Level is the error level (capitalized)
-  Error message is the error description"
-  (when (boundp 'flycheck-current-errors)
-    (if (null flycheck-current-errors)
-        nil
-      (concat "Flycheck Errors of the buffer:\n"
-              (mapconcat
-               (lambda (err)
-                 (format "- Line %d, Column %d (%s): %s"
-                         (flycheck-error-line err)
-                         (or (flycheck-error-column err) 0)
-                         (capitalize (symbol-name (flycheck-error-level err)))
-                         (flycheck-error-message err)))
-               flycheck-current-errors
-               "\n")))))
-
 (provide 'aics-context)
 ;;; aics-context.el ends here
