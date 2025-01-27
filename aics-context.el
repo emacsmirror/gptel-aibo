@@ -48,7 +48,7 @@ It is dynamically updated during the conversation.
 
 "
                  (aics-context--info aics-context--working-buffer))))
-    (message "context: %s" context-string)
+    ;; (message "context: %s" context-string)
     (if (> (length context-string) 0)
         (pcase-exhaustive gptel-use-context
           ('system (concat message "\n\n" context-string))
