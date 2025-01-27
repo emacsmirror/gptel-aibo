@@ -14,6 +14,21 @@
 
 (require 'gptel)
 (require 'gptel-context)
+(require 'imenu)
+
+(defcustom aics-project-buffer-limit 2
+  "Maximum number of project buffers to include when sending context to LLM.
+This should be a positive integer."
+  :type 'natnum
+  :group 'aics
+  :safe #'natnump)
+
+(defcustom aics-project-outline-buffer-limit 3
+  "Maximum number of project buffers whose outlines will be sent to LLM.
+This should be a positive integer."
+  :type 'natnum
+  :group 'aics
+  :safe #'natnump)
 
 (defvar-local aics-context--working-buffer nil
   "Aics working buffer name.")
@@ -68,42 +83,125 @@
                    ""
                  "\n..."))))))
 
-(defun aics-context--buffer-info ()
+(defun aics-context--buffer-info (&optional buffer)
   "Get buffer information including file path and content.
-Returns a formatted string containing:
-1. The buffer's file path (if associated with a file)
-2. The buffer's content wrapped in a fenced code block
-If the buffer is not associated with a file, indicates this.
-If the buffer is empty, indicates this as well."
-  (let ((buffer-content
-         (buffer-substring-no-properties (point-min) (point-max))))
-    (concat (format "Filepath: %s  \n"
-                    (if buffer-file-name
-                        (concat "`" buffer-file-name "`")
-                      "(not associated with a file)"))
-            "Content:  \n"
-            (if buffer-content
-                (aics-context--make-fenced-code-block buffer-content)
-              "(empty)"))))
+When BUFFER is nil, use current buffer."
+  (with-current-buffer (or buffer (current-buffer))
+    (let ((buffer-content
+           (buffer-substring-no-properties (point-min) (point-max))))
+      (concat (format "Filepath: %s  \n"
+                      (if buffer-file-name
+                          (concat "`" buffer-file-name "`")
+                        "(not associated with a file)"))
+              "Content:  \n"
+              (if buffer-content
+                  (aics-context--make-fenced-code-block buffer-content)
+                "(empty)")))))
+
+(defun aics-context--buffer-empty-p (&optional buffer)
+  "Check if BUFFER is empty."
+  (with-current-buffer (or buffer (current-buffer))
+    (= (point-min) (point-max))))
+
+(defun aics-context--buffer-supports-imenu-p (&optional buffer)
+  "Return non-nil if BUFFER supports imenu indexing.
+If BUFFER is nil, use current buffer."
+  (with-current-buffer (or buffer (current-buffer))
+    (or (not (eq imenu-create-index-function
+                 'imenu-default-create-index-function))
+        (or (and imenu-prev-index-position-function
+                 imenu-extract-index-name-function)
+            (and imenu-generic-expression)))))
+
+(defun aics-context--buffer-outline-info (&optional buffer)
+  "Get buffer information including file path and outline.
+When BUFFER is nil, use current buffer."
+  (with-current-buffer (or buffer (current-buffer))
+    (let ((outline (aics-context--imenu-outline (current-buffer))))
+      (concat (format "Filepath: `%s`\n" buffer-file-name)
+              "Outline:\n"
+              (if (string-empty-p outline)
+                  "(empty outline)"
+                outline)))))
+
+(defun aics-context--imenu-outline (&optional buffer)
+  "Generate hierarchical outline from imenu index of BUFFER.
+Return empty string if BUFFER is nil or imenu index unavailable."
+  (with-current-buffer (or buffer (current-buffer))
+      (let ((imenu-auto-rescan t))
+        (let ((index (ignore-errors (imenu--make-index-alist))))
+          (if (and index (listp index))
+              (aics-context--imenu-index-to-string index 0)
+            "")))))
+
+(defun aics-context--imenu-index-to-string (index depth)
+  "Convert an imenu INDEX alist to a hierarchical string.
+DEPTH is the current depth for indentation."
+  (mapconcat
+   (lambda (item)
+     (cond
+      ((and (listp item) (listp (car item)))
+       (aics-context--imenu-index-to-string item depth))
+      ((listp (cdr item))
+       (let ((heading (car item))
+             (subitems (cdr item)))
+         (unless (string= heading ".")
+           (concat
+            (make-string (* 2 depth) ?\s)
+            (format "- %s\n" (aics-context--imenu-item-title heading))
+            (aics-context--imenu-index-to-string subitems (1+ depth))))))
+      ((and (consp item) (not (string= (car item) ".")))
+       (concat
+        (make-string (* 2 depth) ?\s)
+        (format "- %s\n"
+                (aics-context--imenu-item-title (car item)))))
+      (t "")))
+   index ""))
+
+(defun aics-context--imenu-item-title (item)
+  "Extract the string title from ITEM, stripping text properties if present."
+  (cond
+   ((stringp item) (substring-no-properties item))
+   ((and (vectorp item) (stringp (aref item 0)))
+    (substring-no-properties item))
+   (t (format "%s" item))))
 
 (defun aics-context--project-buffers-info ()
   "Get information about other buffers in the same project."
-  (if-let ((proj (project-current)))
-      (let ((buffers (aics-context--project-buffers))
-            info)
-        (if buffers
-            (progn
-              (setq info "\nOther buffers in the same project:\n\n")
-              (dolist (buf buffers)
-                (with-current-buffer buf
-                  (setq info (concat
-                              info
-                              (format "`%s`:  \n" (buffer-name buf))
-                              (aics-context--buffer-info)
-                              "\n\n"))))
-              info)
-          ""))
-    ""))
+  (let* ((buffers (aics-context--project-buffers))
+         (recent-buffers (seq-take buffers aics-project-buffer-limit))
+         (extra-buffers (seq-drop buffers aics-project-buffer-limit))
+         (buffer-infos nil)
+         (outline-infos nil))
+
+    (dolist (buf recent-buffers)
+      (push (cons buf (aics-context--buffer-info buf)) buffer-infos))
+
+    (let ((current-count 0))
+      (cl-loop for buf in extra-buffers
+               until (= aics-project-outline-buffer-limit current-count)
+               when (and (not (aics-context--buffer-empty-p buf))
+                         (aics-context--buffer-supports-imenu-p buf))
+               do
+               (push (cons buf (aics-context--buffer-outline-info buf))
+                     outline-infos)
+               (setq current-count (1+ current-count))))
+
+    (concat
+     (when buffer-infos
+       (concat "Other buffers in the same project:\n\n"
+               (mapconcat (lambda (info)
+                            (concat "`" (buffer-name (car info)) "`:\n"
+                                    (cdr info)))
+                          (nreverse buffer-infos) "\n\n")
+               "\n\n"))
+     (when outline-infos
+       (concat "Other buffer outlines in the same project:\n\n"
+               (mapconcat (lambda (info)
+                            (concat "`" (buffer-name (car info)) "`:\n"
+                                    (cdr info)))
+                          (nreverse outline-infos) "\n\n")
+               "\n")))))
 
 (defun aics-context--project-buffers ()
   "Get buffers in same project as current buffer, excluding current buffer.
