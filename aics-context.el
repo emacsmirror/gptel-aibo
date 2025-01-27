@@ -37,9 +37,18 @@ This should be a positive integer."
   "Wrap MESSAGE with CONTEXTS for GPTel."
   (let ((context-string
          (concat (gptel-context--string contexts)
-                 "\n\n---\n\nRequest context:\n\n\n"
+                 "
+
+---
+
+Request context:
+**Note**: This context reflects the *latest state* of the user's environment. \
+It is dynamically updated during the conversation.
+
+
+"
                  (aics-context--info aics-context--working-buffer))))
-    ;; (message "context: %s" context-string)
+    (message "context: %s" context-string)
     (if (> (length context-string) 0)
         (pcase-exhaustive gptel-use-context
           ('system (concat message "\n\n" context-string))
