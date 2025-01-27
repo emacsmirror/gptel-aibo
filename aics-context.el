@@ -97,14 +97,18 @@ It is dynamically updated during the conversation.
 When BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
     (let ((buffer-content
-           (buffer-substring-no-properties (point-min) (point-max))))
+           (buffer-substring-no-properties (point-min) (point-max)))
+          (language-identifier
+           (aics-context--mode-to-language-identifier major-mode)))
       (concat (format "Filepath: %s  \n"
                       (if buffer-file-name
                           (concat "`" buffer-file-name "`")
                         "(not associated with a file)"))
               "Content:  \n"
               (if buffer-content
-                  (aics-context--make-fenced-code-block buffer-content)
+                  (aics-context--make-fenced-code-block
+                   buffer-content
+                   language-identifier)
                 "(empty)")))))
 
 (defun aics-context--buffer-empty-p (&optional buffer)
@@ -376,11 +380,10 @@ If in a project, returns the listing, else returns empty string."
           (buffer-string)))
     ""))
 
-(defun aics-context--make-fenced-code-block (content)
-  "Wrap CONTENT in a fenced code block using appropriate fence length.
-The fence is generated using `aics-context--make-code-fence' function."
+(defun aics-context--make-fenced-code-block (content &optional language)
+  "Wrap CONTENT in a fenced code block with optional LANGUAGE identifier."
   (let ((fence (aics-context--make-code-fence content)))
-    (concat fence "\n" content "\n" fence)))
+    (concat fence (or language "") "\n" content "\n" fence)))
 
 (defun aics-context--make-code-fence (content)
   "Generate a code fence string that safely encapsulates CONTENT.
@@ -398,6 +401,39 @@ Returns: String containing the appropriate number of backticks"
                                (- (match-end 0) (match-beginning 0))))
       (setq start (match-end 0)))
     (make-string (max 3 (1+ max-backticks)) ?`)))
+
+(defun aics-context--mode-to-language-identifier (mode)
+  "Convert MODE to code block language identifier."
+  (let* ((mode-name (symbol-name mode))
+         (mode-mapping
+          '(("emacs-lisp-mode" . "elisp")
+            ("lisp-mode" . "lisp")
+            ("clojure-mode" . "clojure")
+            ("python-mode" . "python")
+            ("ruby-mode" . "ruby")
+            ("js-mode" . "javascript")
+            ("js2-mode" . "javascript")
+            ("typescript-mode" . "typescript")
+            ("c-mode" . "c")
+            ("c++-mode" . "cpp")
+            ("java-mode" . "java")
+            ("go-mode" . "go")
+            ("rust-mode" . "rust")
+            ("sh-mode" . "shell")
+            ("shell-mode" . "shell")
+            ("css-mode" . "css")
+            ("scss-mode" . "scss")
+            ("html-mode" . "html")
+            ("xml-mode" . "xml")
+            ("sql-mode" . "sql")
+            ("markdown-mode" . "markdown")
+            ("yaml-mode" . "yaml")
+            ("dockerfile-mode" . "dockerfile")
+            ("json-mode" . "json")
+            ("text-mode" . "text")))
+         (lang (cdr (assoc mode-name mode-mapping))))
+    (or lang
+        (replace-regexp-in-string "-mode$" "" mode-name))))
 
 (defun aics-context--indent (content depth)
   "Indent CONTENT by DEPTH spaces at the start of each line.
