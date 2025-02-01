@@ -1,4 +1,4 @@
-;;; aics-context.el --- Context handling for AICS -*- lexical-binding: t; -*-
+;;; gptai-context.el --- Context for gptel-aibo -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025 Sun Yi Ming
 
@@ -7,7 +7,7 @@
 
 ;;; Commentary:
 ;;
-;; Context handling functions for AICS
+;; Context handling functions for gptel-aibo
 ;;
 
 ;;; Code:
@@ -16,25 +16,8 @@
 (require 'gptel-context)
 (require 'imenu)
 
-(defcustom aics-project-buffer-limit 2
-  "Maximum number of project buffers to include when sending context to LLM.
-This should be a positive integer."
-  :type 'natnum
-  :group 'aics
-  :safe #'natnump)
-
-(defcustom aics-project-outline-buffer-limit 3
-  "Maximum number of project buffers whose outlines will be sent to LLM.
-This should be a positive integer."
-  :type 'natnum
-  :group 'aics
-  :safe #'natnump)
-
-(defvar-local aics-context--working-buffer nil
-  "Aics working buffer name.")
-
-(defun aics-context--wrap (message contexts)
-  "Wrap MESSAGE with CONTEXTS for GPTel."
+(defun gptai-context-wrap (message contexts)
+  "Wrap MESSAGE with CONTEXTS for gptel."
   (let ((context-string
          (concat (gptel-context--string contexts)
                  "
@@ -42,12 +25,13 @@ This should be a positive integer."
 ---
 
 Request context:
-**Note**: This context reflects the *latest state* of the user's environment. \
-It is dynamically updated during the conversation.
+**Note**: This context reflects the *latest state* of the user's environment \
+throughout the entire conversation. You should not infer its current state \
+from the conversation, as suggestions may not have been executed.
 
 
 "
-                 (aics-context--info aics-context--working-buffer))))
+                 (gptai-context-info gptai--working-buffer))))
     ;; (message "context: %s" context-string)
     (if (> (length context-string) 0)
         (pcase-exhaustive gptel-use-context
@@ -56,67 +40,80 @@ It is dynamically updated during the conversation.
           ('nil    message))
       message)))
 
-(defun aics-context--info (&optional buffer)
+(defun gptai-context-info (&optional buffer)
   "Get context information for BUFFER."
+  (concat (gptai-context--working-buffer-info buffer)
+          "\n\n"
+          (gptai-context--project-buffers-info buffer)))
+
+(defun gptai-context--working-buffer-info (&optional buffer)
+  "Get context information about BUFFER."
   (with-current-buffer (or buffer (current-buffer))
-    (concat (aics-context--current-buffer-info)
-            "\n\n"
-            (aics-context--project-buffers-info))))
+    (let* ((point (point))
+           (widen-point-max (save-restriction (widen) (point-max)))
+           (active-buffer-size (- (point-max) (point-min)))
+           (context-fragment-boundaries
+            (gptai-context--fragment-boundaries
+             (if (<= active-buffer-size gptai--max-buffer-size)
+                 gptai--max-context-fragment-size
+               gptai--max-buffer-size)))
+           (before-start (car context-fragment-boundaries))
+           (after-end (cdr context-fragment-boundaries)))
+      (concat
+       (format "Current working buffer: `%s`\n\n" (buffer-name))
+       (if (<= active-buffer-size gptai--max-buffer-size)
+           (gptai-context--buffer-info)
+         (gptai-context--buffer-filename-info))
+       "\n"
+       "Fragment before the cursor:  \n"
+       (if (= point 1)
+           "(cursor is at the beginning of the buffer)  "
+         (concat (unless (= before-start 1) "...\n")
+                 (gptai-context--make-fenced-code-block
+                  (buffer-substring-no-properties before-start point))))
+       "\n\n"
+       "Fragment after the cursor:  \n"
+       (if (= point widen-point-max)
+           "(cursor is at the end of the buffer)  "
+         (concat
+          (gptai-context--make-fenced-code-block
+           (buffer-substring-no-properties point after-end))
+          (unless (= after-end widen-point-max)
+            "\n...")))))))
 
-(defun aics-context--current-buffer-info ()
-  "Get information about current buffer."
-  (concat (format "Current buffer: `%s`\n\n" (buffer-name))
-          (aics-context--buffer-info)
-          "\n\n"
-          "Fragment before the cursor:  \n"
-          (if (= (point) (point-min))
-              "(cursor is at the beginning of the buffer)  "
-            (let ((content-before-cursor
-                   (buffer-substring-no-properties (point-min) (point)))
-                  (fragment-before-cursor (aics-context--fragment-before-cursor)))
-              (concat
-               (if (equal content-before-cursor fragment-before-cursor)
-                   ""
-                 "...\n")
-               (aics-context--make-fenced-code-block fragment-before-cursor))))
-          "\n\n"
-          "Fragment after the cursor:  \n"
-          (if (= (point) (point-max))
-              "(cursor is at the end of the buffer)  "
-            (let ((content-after-cursor
-                   (buffer-substring-no-properties (point) (point-max)))
-                  (fragment-after-cursor (aics-context--fragment-after-cursor)))
-              (concat
-               (aics-context--make-fenced-code-block fragment-after-cursor)
-               (if (equal content-after-cursor fragment-after-cursor)
-                   ""
-                 "\n..."))))))
-
-(defun aics-context--buffer-info (&optional buffer)
+(defun gptai-context--buffer-info (&optional buffer)
   "Get buffer information including file path and content.
+
 When BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
     (let ((buffer-content
            (buffer-substring-no-properties (point-min) (point-max)))
           (language-identifier
-           (aics-context--mode-to-language-identifier major-mode)))
-      (concat (format "Filepath: %s  \n"
-                      (if buffer-file-name
-                          (concat "`" buffer-file-name "`")
-                        "(not associated with a file)"))
+           (gptai-context--mode-to-language-identifier major-mode)))
+      (concat (gptai-context--buffer-filename-info)
               "Content:  \n"
               (if buffer-content
-                  (aics-context--make-fenced-code-block
+                  (gptai-context--make-fenced-code-block
                    buffer-content
                    language-identifier)
-                "(empty)")))))
+                "(empty)")
+              "\n"))))
 
-(defun aics-context--buffer-empty-p (&optional buffer)
+(defun gptai-context--buffer-filename-info (&optional buffer)
+"Return the file path info associated with BUFFER.
+
+BUFFER is the buffer to check, or the current buffer if nil."
+  (format "Filepath: %s  \n"
+          (if-let ((file-name (buffer-file-name buffer)))
+              (concat "`" file-name "`")
+            "(not associated with a file)")))
+
+(defun gptai-context--buffer-empty-p (&optional buffer)
   "Check if BUFFER is empty."
   (with-current-buffer (or buffer (current-buffer))
     (= (point-min) (point-max))))
 
-(defun aics-context--buffer-supports-imenu-p (&optional buffer)
+(defun gptai-context--buffer-supports-imenu-p (&optional buffer)
   "Return non-nil if BUFFER supports imenu indexing.
 If BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
@@ -126,52 +123,49 @@ If BUFFER is nil, use current buffer."
                  imenu-extract-index-name-function)
             (and imenu-generic-expression)))))
 
-(defun aics-context--buffer-outline-info (&optional buffer)
+(defun gptai-context--buffer-outline-info (&optional buffer)
   "Get buffer information including file path and outline.
 When BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
-    (let ((outline (aics-context--imenu-outline (current-buffer))))
-      (concat (format "Filepath: `%s`\n" buffer-file-name)
-              "Outline:\n"
-              (if (string-empty-p outline)
-                  "(empty outline)"
-                outline)))))
+    (if-let ((outline (gptai-context--imenu-outline (current-buffer))))
+        (concat (format "Filepath: `%s`\n" buffer-file-name)
+                "Outline:\n"
+                outline))))
 
-(defun aics-context--imenu-outline (&optional buffer)
+(defun gptai-context--imenu-outline (&optional buffer)
   "Generate hierarchical outline from imenu index of BUFFER.
 Return empty string if BUFFER is nil or imenu index unavailable."
   (with-current-buffer (or buffer (current-buffer))
-      (let ((imenu-auto-rescan t))
-        (let ((index (ignore-errors (imenu--make-index-alist))))
-          (if (and index (listp index))
-              (aics-context--imenu-index-to-string index 0)
-            "")))))
+    (when-let
+        ((index (let ((imenu-auto-rescan t))
+                  (ignore-errors (imenu--make-index-alist)))))
+      (gptai-context--imenu-index-to-string index 0))))
 
-(defun aics-context--imenu-index-to-string (index depth)
+(defun gptai-context--imenu-index-to-string (index depth)
   "Convert an imenu INDEX alist to a hierarchical string.
 DEPTH is the current depth for indentation."
   (mapconcat
    (lambda (item)
      (cond
       ((and (listp item) (listp (car item)))
-       (aics-context--imenu-index-to-string item depth))
+       (gptai-context--imenu-index-to-string item depth))
       ((listp (cdr item))
        (let ((heading (car item))
              (subitems (cdr item)))
          (unless (string= heading ".")
            (concat
             (make-string (* 2 depth) ?\s)
-            (format "- %s\n" (aics-context--imenu-item-title heading))
-            (aics-context--imenu-index-to-string subitems (1+ depth))))))
+            (format "- %s\n" (gptai-context--imenu-item-title heading))
+            (gptai-context--imenu-index-to-string subitems (1+ depth))))))
       ((and (consp item) (not (string= (car item) ".")))
        (concat
         (make-string (* 2 depth) ?\s)
         (format "- %s\n"
-                (aics-context--imenu-item-title (car item)))))
+                (gptai-context--imenu-item-title (car item)))))
       (t "")))
    index ""))
 
-(defun aics-context--imenu-item-title (item)
+(defun gptai-context--imenu-item-title (item)
   "Extract the string title from ITEM, stripping text properties if present."
   (cond
    ((stringp item) (substring-no-properties item))
@@ -179,26 +173,30 @@ DEPTH is the current depth for indentation."
     (substring-no-properties item))
    (t (format "%s" item))))
 
-(defun aics-context--project-buffers-info ()
-  "Get information about other buffers in the same project."
-  (let* ((buffers (aics-context--project-buffers))
-         (recent-buffers (seq-take buffers aics-project-buffer-limit))
-         (extra-buffers (seq-drop buffers aics-project-buffer-limit))
+(cl-defun gptai-context--project-buffers-info (&optional buffer quota)
+  "Get information about other buffers in the same project of BUFFER.
+
+The total size of the returned information will be limited by QUOTA."
+  (let* ((buffers (gptai-context--project-buffers buffer))
          (buffer-infos nil)
-         (outline-infos nil))
+         (current-size 0)
+         (buffer-count 0))
 
-    (dolist (buf recent-buffers)
-      (push (cons buf (aics-context--buffer-info buf)) buffer-infos))
-
-    (let ((current-count 0))
-      (cl-loop for buf in extra-buffers
-               until (= aics-project-outline-buffer-limit current-count)
-               when (and (not (aics-context--buffer-empty-p buf))
-                         (aics-context--buffer-supports-imenu-p buf))
-               do
-               (push (cons buf (aics-context--buffer-outline-info buf))
-                     outline-infos)
-               (setq current-count (1+ current-count))))
+    (cl-loop
+     for buf in buffers
+     until (>= buffer-count gptai--max-project-buffer-count)
+     do
+     (when-let*
+         ((buffer-size (buffer-size buf))
+          (buffer-info
+           (if (<= buffer-size gptai--max-project-buffer-size)
+               (gptai-context--buffer-info buf)
+             (gptai-context--buffer-outline-info buf)))
+          (buffer-info-size (length buffer-info)))
+       (when (or (not quota) (<= (+ current-size buffer-info-size) quota))
+         (push (cons buf buffer-info) buffer-infos)
+         (setq current-size (+ current-size buffer-info-size))
+         (setq buffer-count (1+ buffer-count)))))
 
     (concat
      (when buffer-infos
@@ -206,35 +204,86 @@ DEPTH is the current depth for indentation."
                (mapconcat (lambda (info)
                             (concat "`" (buffer-name (car info)) "`:\n"
                                     (cdr info)))
-                          (nreverse buffer-infos) "\n\n")
-               "\n\n"))
-     (when outline-infos
-       (concat "Other buffer outlines in the same project:\n\n"
-               (mapconcat (lambda (info)
-                            (concat "`" (buffer-name (car info)) "`:\n"
-                                    (cdr info)))
-                          (nreverse outline-infos) "\n\n")
-               "\n")))))
+                          (nreverse buffer-infos) "\n")
+               "\n\n")))))
 
-(defun aics-context--project-buffers ()
-  "Get buffers in same project as current buffer, excluding current buffer.
-Return a list of buffers that belong to the same project as the current
-buffer, excluding the current buffer itself. If the current buffer does
-not belong to a project, return an empty list."
-  (when-let ((project-current (project-current)))
-    (let ((project-root (aics-context--project-root project-current))
-          (current-buffer (current-buffer)))
+(defun gptai-context--project-buffers (&optional buffer)
+  "Get buffers in the same project as BUFFER, itself excluded."
+  (let ((current-buffer (or buffer (current-buffer))))
+    (when-let ((project-current (with-current-buffer current-buffer
+                                  (project-current))))
       (seq-filter
        (lambda (buf)
-         (and (not (eq buf current-buffer)) ; Exclude current buffer
+         (and (not (eq buf current-buffer))
               (buffer-file-name buf)
               (with-current-buffer buf
-                (when-let ((buf-project (project-current)))
-                  (equal (aics-context--project-root buf-project)
-                         project-root)))))
+                (equal (project-current) project-current))))
        (buffer-list)))))
 
-(defun aics-context--fragment-before-cursor ()
+(defun gptai-context--fragment (max-context-length)
+  "Extract the text fragment around the point.
+
+The total length is limited by MAX-CONTEXT-LENGTH"
+  (let* ((boundaries (gptai-context--fragment-boundaries max-context-length))
+         (start (car boundaries))
+         (end (cdr boundaries))
+         (before-text (buffer-substring-no-properties start (point)))
+         (after-text (buffer-substring-no-properties (point) end)))
+    (cons before-text after-text)))
+
+(defun gptai-context--fragment-boundaries
+    (max-context-length &optional buffer pos)
+  "Compute context boundaries around POS within MAX-CONTEXT-LENGTH chars.
+
+BUFFER is the buffer to use, or the current buffer if nil.
+POS is the position to center on, or the current point if nil."
+  (with-current-buffer (or buffer (current-buffer))
+    (let* ((pos (or pos (point)))
+           (before-start
+            (save-excursion
+              (while (progn
+                       (beginning-of-defun)
+                       (not (gptai-context--unique-region-p (point) pos))))
+              (point)))
+           (after-end (save-excursion
+                        (end-of-defun)
+                        (point)))
+           (before-len (- pos before-start))
+           (after-len (- after-end pos))
+           (total-len (+ before-len after-len)))
+
+      (if (<= total-len max-context-length)
+          (cons before-start after-end)
+
+        (let* ((half-limit (/ max-context-length 2))
+               (tolerance-limit (* max-context-length 0.6)))
+          (cond
+           ((and (<= before-len tolerance-limit)
+                 (<= before-len after-len))
+            (cons before-start
+                  (+ pos (- max-context-length before-len))))
+
+           ((and (<= after-len tolerance-limit)
+                 (<= after-len before-len))
+            (cons (- pos (- max-context-length after-len))
+                  after-end))
+
+           (t
+            (cons (- pos half-limit)
+                  (+ pos half-limit)))))))))
+
+(defun gptai-context--unique-region-p (beg end)
+  "Check if the text between BEG and END appears uniquely in the buffer.
+
+BEG is the starting position of the region.
+END is the ending position of the region."
+  (let ((region-text (buffer-substring-no-properties beg end)))
+    (save-excursion
+      (goto-char (point-min))
+      (when (search-forward region-text nil t)
+        (eq (match-beginning 0) beg)))))
+
+(defun gptai-context--fragment-before-cursor ()
   "Get a meaningful fragment of text before the cursor.
 
 The function collects text starting from the cursor position and continues
@@ -276,7 +325,7 @@ Returns a string containing the collected text fragment."
                     (setq stop t))))))))
     prefix))
 
-(defun aics-context--fragment-after-cursor ()
+(defun gptai-context--fragment-after-cursor ()
   "Get a meaningful fragment of text after the cursor.
 
 The function collects text starting from the cursor position and continues
@@ -320,7 +369,7 @@ Returns a string containing the collected text fragment."
                     (setq stop t))))))))
     suffix))
 
-(defun aics-context--project-current-directory-info ()
+(defun gptai-context--project-current-directory-info ()
   "Return current directory listing as a string if in a project.
 If not in a project, return empty string.
 The listing includes files and directories, with '/' appended to directory
@@ -340,7 +389,7 @@ names."
           (buffer-string)))
     ""))
 
-(defun aics-context--project-root (project)
+(defun gptai-context--project-root (project)
   "Get the root directory of PROJECT.
 Returns: The project root directory as a string, or nil if not found."
   (cond
@@ -349,25 +398,25 @@ Returns: The project root directory as a string, or nil if not found."
    ((fboundp 'project-roots)
     (car (project-roots project)))))
 
-(defun aics-context--project-directory-info ()
+(defun gptai-context--project-directory-info ()
   "Return project directory information based on current location."
   (if (project-current)
-      (let ((top-info (aics-context--project-top-directory-info))
-            (current-info (aics-context--project-current-directory-info)))
+      (let ((top-info (gptai-context--project-top-directory-info))
+            (current-info (gptai-context--project-current-directory-info)))
         (if (string-empty-p top-info)
             ""
           (if (string= (file-name-directory
                         (or buffer-file-name default-directory))
-                       (aics-context--project-root (project-current)))
+                       (gptai-context--project-root (project-current)))
               top-info
             (concat top-info "\n" current-info))))
     ""))
 
-(defun aics-context--project-top-directory-info ()
+(defun gptai-context--project-top-directory-info ()
   "Return formatted string of top-level directory listing.
 If in a project, returns the listing, else returns empty string."
   (if-let ((proj (project-current)))
-      (let ((project-root (aics-context--project-root proj)))
+      (let ((project-root (gptai-context--project-root proj)))
         (with-temp-buffer
           (insert "Files in the project's top directory:\n```\n")
           (dolist (file (directory-files project-root))
@@ -380,12 +429,12 @@ If in a project, returns the listing, else returns empty string."
           (buffer-string)))
     ""))
 
-(defun aics-context--make-fenced-code-block (content &optional language)
+(defun gptai-context--make-fenced-code-block (content &optional language)
   "Wrap CONTENT in a fenced code block with optional LANGUAGE identifier."
-  (let ((fence (aics-context--make-code-fence content)))
+  (let ((fence (gptai-context--make-code-fence content)))
     (concat fence (or language "") "\n" content "\n" fence)))
 
-(defun aics-context--make-code-fence (content)
+(defun gptai-context--make-code-fence (content)
   "Generate a code fence string that safely encapsulates CONTENT.
 The fence length is determined by:
 1. The longest sequence of consecutive backticks in CONTENT
@@ -402,7 +451,7 @@ Returns: String containing the appropriate number of backticks"
       (setq start (match-end 0)))
     (make-string (max 3 (1+ max-backticks)) ?`)))
 
-(defun aics-context--mode-to-language-identifier (mode)
+(defun gptai-context--mode-to-language-identifier (mode)
   "Convert MODE to code block language identifier."
   (let* ((mode-name (symbol-name mode))
          (mode-mapping
@@ -435,7 +484,7 @@ Returns: String containing the appropriate number of backticks"
     (or lang
         (replace-regexp-in-string "-mode$" "" mode-name))))
 
-(defun aics-context--indent (content depth)
+(defun gptai-context--indent (content depth)
   "Indent CONTENT by DEPTH spaces at the start of each line.
 Returns the indented content as a string."
   (let ((lines (split-string content "\n")))
@@ -444,5 +493,5 @@ Returns the indented content as a string."
                lines
                "\n")))
 
-(provide 'aics-context)
-;;; aics-context.el ends here
+(provide 'gptai-context)
+;;; gptai-context.el ends here
