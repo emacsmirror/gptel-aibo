@@ -86,8 +86,7 @@ find a suitable key that won't upset anyone. In my case, I have bound it to
   The size limit for other buffers within the same project as your working buffer
   that are automatically sent to the LLM.
   
-  If a buffer exceeds this size, only the
-  outline will be sent.
+  If a buffer exceeds this size, only the outline will be sent, if it has one.
   
   The default value is 16000.
 
@@ -106,4 +105,4 @@ A confirmation prompt will be shown when attempting to delete.
 3. Modifications to the buffer will be saved. While you can revert changes using
 Emacs’ undo system, it’s best to place your project under version control.
 Additionally, files will be deleted upon confirmation and cannot be undone by
-emacs itself.
+Emacs itself.
