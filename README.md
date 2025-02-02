@@ -49,8 +49,7 @@ with more detailed instructions.
 
 ### Completion at point
 `gptel-aibo` also provides a quick interaction command, `gptai-complete-at-point`,
-which automatically inserts relevant content at the current position based on
-the context.
+which can insert relevant content at the current position based on the context.
 For example, after writing a function comment, you can use this single command
 to generate the corresponding code. Use TAB or Enter to accept, and other keys
 to discard.
@@ -118,12 +117,14 @@ If you like it, you can add it to your configuration file.
     '(markdown-header-face-6 :height 1.05 :foreground "#5e81ac" :weight semi-bold :inherit markdown-header-face)))
 ```
 
-## security issues
+## Security issues
 1. The file path and content of the current working buffer, as well as buffers
 from the same project, may be sent to the LLM.
-2. Only projects are allowed to create and delete files under the project root.
-A confirmation prompt will be shown when attempting to delete.
-3. Modifications to the buffer will be saved. While you can revert changes using
-Emacs’ undo system, it’s best to place your project under version control.
-Additionally, files will be deleted upon confirmation and cannot be undone by
-Emacs itself.
+2. There are three actions defined in `gptel-aibo`: modification, creation,
+and deletion. These actions are only allowed if the target is under the project
+root of the current working buffer. If a buffer is not part of a project,
+only modifications to itself can be executed.
+3. Modifications and creations are saved immediately after they are applied,
+and an additional confirmation is required for deletion. While some changes
+can be reverted using Emacs’ undo system, it’s best to place your project under
+version control to ensure safety and recoverability.
