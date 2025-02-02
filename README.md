@@ -48,7 +48,7 @@ Once a response is received, you can apply it using the command
 with more detailed instructions.
 
 ### Completion at point
-`gptel-aibo` provides a quick interaction command, `gptai-complete-at-point`, 
+`gptel-aibo` also provides a quick interaction command, `gptai-complete-at-point`,
 which automatically inserts relevant content at the current position based on
 the context.
 For example, after writing a function comment, you can use this single command
