@@ -260,6 +260,11 @@ If a buffer's content exceeds this size, only its outline will be sent"
       (text-mode)
       (visual-line-mode 1))
      (t (funcall gptel-default-mode)))
+    (unless (local-variable-p 'gptel-prompt-prefix-alist)
+      (setq-local
+       gptel-prompt-prefix-alist
+       (append (assq-delete-all 'markdown-mode gptel-prompt-prefix-alist)
+               '((markdown-mode . "\\> ")))))
     (unless gptai-mode (gptai-mode 1))
     (if (bobp) (insert (gptel-prompt-prefix-string)))
     (when (called-interactively-p 'any)
