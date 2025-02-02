@@ -97,6 +97,25 @@ find a suitable key that won't upset anyone. In my case, I have bound it to
   
   The default value is 2.
 
+## Miscellaneous
+To make the gptai console look a bit fancier, I copied the following markdown
+configuration from this Reddit post
+[beautify_markdown_on_emacs](https://www.reddit.com/r/emacs/comments/10h9jf0/beautify_markdown_on_emacs/).
+Thanks to the original author!
+
+If you like it, you can add it to your configuration file.
+```elisp
+(after! markdown-mode
+  (custom-set-faces!
+    '(markdown-header-delimiter-face :foreground "#616161" :height 0.9)
+    '(markdown-header-face-1 :height 1.8 :foreground "#A3BE8C" :weight extra-bold :inherit markdown-header-face)
+    '(markdown-header-face-2 :height 1.4 :foreground "#EBCB8B" :weight extra-bold :inherit markdown-header-face)
+    '(markdown-header-face-3 :height 1.2 :foreground "#D08770" :weight extra-bold :inherit markdown-header-face)
+    '(markdown-header-face-4 :height 1.15 :foreground "#BF616A" :weight bold :inherit markdown-header-face)
+    '(markdown-header-face-5 :height 1.1 :foreground "#b48ead" :weight bold :inherit markdown-header-face)
+    '(markdown-header-face-6 :height 1.05 :foreground "#5e81ac" :weight semi-bold :inherit markdown-header-face)))
+```
+
 ## security issues
 1. The file path and content of the current working buffer, as well as buffers
 from the same project, may be sent to the LLM.
