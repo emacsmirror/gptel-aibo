@@ -2,8 +2,9 @@
 
 **gptel-aibo** is an AI writing assistant system built on top of **gptel**.
 It helps users create and manage content in Emacs, including code, documentation,
-and even novels. Essentially, it sends the content (or a portion of it) that
-you're currently working on as you talk to the LLM, Once a response is received,
+and even novels. It automatically sends the content (or a portion of it) that
+you're currently working on as you talk to the LLM, allowing you to refer to
+"this function", "this class", "this file", etc. Once a response is received,
 you can apply it using the command `gptai-apply-last-suggestions`
 (bound to `C-c !`).
 
@@ -33,17 +34,17 @@ using `use-package!`, make sure `gptel-aibo` is loaded after `flycheck`.
 ```
 
 ## Usage
-With the `gptai` interactive command, you can open or select an existing
+With the `gptai` interactive command, you can open or switch to an existing
 `gptel-aibo` console, which is a `markdown` page with the `gptai` minor mode
 enabled, an extension of `gptel-mode`.
 
 To get started, open your file, move the cursor to the section you're working on,
-and then switch to the gptai console. There, you can talk to the LLM and refer to
-"this function", "this class", "this file", etc. `gptel-aibo` will automatically
-send the content you're currently working on.
+and then switch to the gptai console. There, you can talk to the LLM and receive
+suggestions.
 
 Once a response is received, you can apply it using the command 
-`gptai-apply-last-suggestions` (bound to `C-c !`).
+`gptai-apply-last-suggestions` (bound to `C-c !`), or continue the conversation
+with more detailed instructions.
 
 ### Completion at point
 `gptel-aibo` provides a quick interaction command, `gptai-complete-at-point`, 
