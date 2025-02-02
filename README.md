@@ -40,7 +40,8 @@ enabled, an extension of `gptel-mode`.
 
 To get started, open your file, move the cursor to the section you're working on,
 and then switch to the gptai console. There, you can talk to the LLM and receive
-suggestions.
+suggestions. Use `gptai-send` to send your request, which is bound to `C-c RET`,
+just like the send command in `gptel-mode`.
 
 Once a response is received, you can apply it using the command 
 `gptai-apply-last-suggestions` (bound to `C-c !`), or continue the conversation
