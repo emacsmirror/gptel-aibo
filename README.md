@@ -1,12 +1,14 @@
 # gptel-aibo
 
-**gptel-aibo** is an AI writing assistant system built on top of **gptel**.
+**gptel-aibo** is an AI writing assistant system built on top of
+[gptel](https://github.com/karthink/gptel) .
 It helps users create and manage content in Emacs, including code, documentation,
 and even novels. It automatically sends the content (or a portion of it) that
 you're currently working on as you talk to the LLM, allowing you to refer to
-"this function", "this class", "this file", etc. Once a response is received,
-you can apply it using the command `gptai-apply-last-suggestions`
-(bound to `C-c !`).
+"this function", "this class", "this file", etc. You can then request the LLM’s
+help with creating your code, generating documentation, and many other things.
+Once a response is received, you can apply it using the command
+`gptai-apply-last-suggestions` (bound to `C-c !`).
 
 The term "aibo," meaning "partner," is currently ambiguous—it could refer to
 gptel’s partner, or the user’s.
@@ -71,6 +73,15 @@ find a suitable key that won't upset anyone. In my case, I have bound it to
 ### Refactor a sample project
 ![Sample project refactor](assets/aibo-refactor-sample-800-10.gif)
 
+### Other common tasks & ideas
+- generate a docstring for this function
+- make the comment conform to Doxygen style
+- generate the code for this function based on the comments (better done with `gptai-complete-at-point`)
+- refactor this function and reorganize its logic
+- reformat this function, as some lines are too long
+- extract the common parts of functions A and B into a new function
+- change the coding style from snake_case to camelCase (or vice versa)
+
 ## Customization
 - `gptai--max-buffer-size`
 
@@ -125,6 +136,6 @@ and deletion. These actions are only allowed if the target is under the project
 root of the current working buffer. If a buffer is not part of a project,
 only modifications to itself can be executed.
 3. Modifications and creations are saved immediately after they are applied,
-and an additional confirmation is required for deletion. While some changes
-can be reverted using Emacs’ undo system, it’s best to place your project under
-version control to ensure safety and recoverability.
+with an additional confirmation required for deletion. While some changes can be
+reverted using Emacs’ undo system, it’s best to place your project under version
+control to enhance safety and recoverability.
