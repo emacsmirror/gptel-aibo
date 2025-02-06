@@ -34,6 +34,13 @@ using `use-package!`, make sure `gptel-aibo` is loaded after `flycheck`.
 (use-package! gptel-aibo
   :after (gptel flycheck))
 ```
+Alternatively, define a different keybinding:
+```elisp
+(use-package! gptel-aibo
+  :after (gptel)
+  :config
+  (define-key gptai-mode-map (kbd "C-c /") #'gptai-apply-last-suggestions))
+```
 
 ## Usage
 With the `gptai` interactive command, you can open or switch to an existing
@@ -50,20 +57,24 @@ Once a response is received, you can apply it using the command
 with more detailed instructions.
 
 ### Completion at point
-`gptel-aibo` also provides a quick interaction command, `gptai-complete-at-point`,
-which can insert relevant content at the current position based on the context.
-For example, after writing a function comment, you can use this single command
-to generate the corresponding code. Use TAB or Enter to accept, and other keys
-to discard.
+`gptel-aibo` also provides a minor mode `gptai-complete-mode` and an interactive
+command `gptai-complete-at-point`, which can insert relevant content at the
+current position based on the context. For example, after writing a function
+comment, you can use this single command to generate the corresponding code.
+Use TAB or Enter to accept, and other keys to discard.
 
-Currently, this command doesn't have a default keybinding, as it's difficult to
-find a suitable key that won't upset anyone. In my case, I have bound it to
-`Command i`.
+You can globally enable `gptai-complete-mode`, which has no side effects and
+only works when you invoke it. You can also add it to specific mode hooks if
+that suits your workflow. In the minor mode, `gptai-complete-at-point` is bound
+to `C-c C-c i`. It’s a bit long, but less likely to upset someone by taking away
+their favorite key. You can also bind your own key, for example:
+- Doom Emacs
 ```elisp
 (use-package! gptel-aibo
-  :after (gptel flycheck)
+  :after (gptel)
   :config
-  (map! "s-i" #'gptai-complete-at-point))
+  (define-key gptai-complete-mode-map (kbd "C-c i") #'gptai-complete-at-point)
+  (add-hook 'prog-mode-hook #'gptai-complete-mode))
 ```
 
 ## Samples

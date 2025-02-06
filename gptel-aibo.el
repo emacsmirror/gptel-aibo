@@ -201,15 +201,18 @@ If a buffer's content exceeds this size, only its outline will be sent"
 (require 'gptai-context)
 (require 'gptai-action)
 
-;;;###autoload
-(define-minor-mode gptai-mode
-  "Minor mode for gptel-aibo interacting with LLMs."
-  :lighter " GPTAi"
-  :keymap
+(defvar gptai-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c RET") #'gptai-send)
     (define-key map (kbd "C-c !") #'gptai-apply-last-suggestions)
     map)
+  "Keymap for `gptai-mode'.")
+
+;;;###autoload
+(define-minor-mode gptai-mode
+  "Minor mode for gptel-aibo interacting with LLMs."
+  :lighter " GPTAi"
+  :keymap gptai-mode-map
   (if gptai-mode
       (progn
         (if gptel-mode
@@ -436,6 +439,18 @@ See `gptel--url-get-response' for details."
                                 (call-interactively cmd)))))))))))
    (t
     (message "The LLM did not respond as requested."))))
+
+(defvar gptai-complete-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c C-i i") 'gptai-complete-at-point)
+    map)
+  "Keymap used for `gptai-complete-mode`.")
+
+;;;###autoload
+(define-minor-mode gptai-complete-mode
+  "Minor mode gptai llm completions."
+  :lighter " GPTAi-Complete"
+  :keymap gptai-complete-mode-map)
 
 (provide 'gptel-aibo)
 ;;; gptel-aibo.el ends here
