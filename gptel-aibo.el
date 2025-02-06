@@ -207,7 +207,7 @@ If a buffer's content exceeds this size, only its outline will be sent"
 (defvar-local gptai--old-context-wrap-function nil)
 
 (defvar-local gptai--from-gptel-mode nil
-  "If this from gptel-mode.")
+  "If this from `gptel-mode'.")
 
 (require 'gptel)
 (require 'gptel-context)
