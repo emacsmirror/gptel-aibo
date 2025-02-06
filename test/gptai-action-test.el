@@ -138,6 +138,46 @@ lines remain")
           (gptai-parse-op parser target lines)))
     (should (equal (car result) 'error))))
 
+(ert-deftest test-gptai--parse-code-block ()
+  "Test gptai--parse-code-block."
+  (let* ((input "
+ \n
+```plain
+hello
+world
+```
+lines remain")
+         (lines (split-string input "\n"))
+         (result (gptai--parse-code-block lines)))
+    (should (equal (car result) "hello\nworld"))
+    (should (equal (cdr result) '("lines remain")))))
+
+(ert-deftest test-gptai--parse-code-block-end-fence-with-space ()
+  "Test gptai--parse-code-block."
+  (let* ((input "
+ \n
+```plain
+hello
+world
+``` \nlines remain")
+         (lines (split-string input "\n"))
+         (result (gptai--parse-code-block lines)))
+    (should (equal (car result) "hello\nworld"))
+    (should (equal (cdr result) '("lines remain")))))
+
+(ert-deftest test-gptai--parse-code-block-end-fence-with-others ()
+  "Test gptai--parse-code-block."
+  (let* ((input "
+ \n
+```plain
+hello
+world
+```NO!
+lines remain")
+         (lines (split-string input "\n"))
+         (result (gptai--parse-code-block lines)))
+    (should (equal (car result) 'error))))
+
 (ert-deftest test-gptai-parse-deletion-op ()
   "Test gptai-parse-op with deletion op."
   (let* ((filename "filename1")
