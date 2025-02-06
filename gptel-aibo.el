@@ -234,7 +234,7 @@ If a buffer's content exceeds this size, only its outline will be sent"
         (setq gptai--old-system-message gptel--system-message)
         (setq-local gptel--system-message gptai--system-message)
         (setq gptai--ui-buffer (current-buffer))
-        (setq gptai--working-buffer (other-buffer nil t))
+        (setq gptai--working-buffer (other-buffer gptai--ui-buffer t))
         ;; (setq header-line-format
         ;;       (list '(:eval (concat "<"
         ;;                             (buffer-name gptai--working-buffer)
@@ -253,7 +253,7 @@ If a buffer's content exceeds this size, only its outline will be sent"
 (defun gptai-mode--check-buffer-list ()
   "Check and update the working buffer for gptai mode."
   (when (eq gptai--ui-buffer (car (buffer-list)))
-    (setq gptai--working-buffer (other-buffer nil t))))
+    (setq gptai--working-buffer (other-buffer gptai--ui-buffer t))))
 
 ;;;###autoload
 (defun gptai (name)
@@ -293,7 +293,7 @@ If a buffer's content exceeds this size, only its outline will be sent"
 
   (when (or (not gptai--working-buffer)
             (not (buffer-live-p gptai--working-buffer)))
-    (setq gptai--working-buffer (other-buffer t nil)))
+    (setq gptai--working-buffer (other-buffer gptai--ui-buffer t)))
 
   ;; HACK: gptel requires a non-empty context alist for context wrapping.
   (unless gptel-context--alist
