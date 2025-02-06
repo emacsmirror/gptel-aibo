@@ -299,8 +299,7 @@ or (error . message) on failure."
     (when-let* ((working-dir
                  (buffer-local-value 'default-directory working-buffer))
                 (project (project-current nil working-dir))
-                (gptai-context--project-root
-                 (gptai-context--project-root project))
+                (project-root (gptai-context--project-root project))
                 (file-path
                  (if (bufferp buffer-or-filename)
                      (buffer-local-value 'default-directory buffer-or-filename)
