@@ -66,24 +66,19 @@ Returns:
       :no-op)
      (t
       (message "Applying OPs%s" (if dry-run "[dry-run]" ""))
-      (and
-       (cl-loop
-        for op in parse-result
-        always
-        (let ((op-type (alist-get :type op)))
-          (condition-case err
-              (progn
-                (pcase op-type
-                  ('MODIFY (gptai--apply-modify-op op dry-run))
-                  ('CREATE (gptai--apply-create-op op dry-run))
-                  ('DELETE (gptai--apply-delete-op op dry-run)))
-                t)
-            (error
-             (message "Error applying OP: %s" (error-message-string err))
-             nil))))
-       (message "All operations applied%s successfully."
-                (if dry-run "[dry-run]" ""))
-       t)))))
+      (and (cl-loop
+            for op in parse-result
+            always
+            (condition-case err
+                (progn
+                  (gptai-execute op dry-run)
+                  t)
+              (error
+               (message "Error applying OP: %s" (error-message-string err))
+               nil)))
+           (message "All operations applied%s successfully."
+                    (if dry-run "[dry-run]" ""))
+           t)))))
 
 (defun gptai--parse-suggestions (response)
   "Parse RESPONSE string into a list of operations.
@@ -91,27 +86,27 @@ Returns ops list on success, or (error . message) on failure."
   (let ((lines (split-string response "\n"))
         (ops nil)
         (parse-error nil)) ;; Track parsing errors
-
     (while (and lines (not parse-error))
       (let ((line (car lines)))
-        (if (string-match "^\\*\\*OP\\*\\* \\(\\w+\\)\\(?: \\(.*\\)\\)?" line)
-            ;; Process matched OP line
-            (let* ((op (match-string 1 line))
-                   (target (gptai--markdown-unbacktick (match-string 2 line)))
-                   (next-lines (cdr lines))
-                   (op-parse-result
-                    (pcase op
-                      ("MODIFY" (gptai--parse-modify-op target next-lines))
-                      ("CREATE" (gptai--parse-create-op target next-lines))
-                      ("DELETE" (gptai--make-delete-op target next-lines))
-                      (_ (list 'error (format "Unknown operation type: %s" op)
-                               lines)))))
-              (if (eq (car op-parse-result) 'error)
-                  (setq parse-error op-parse-result)
-                (push (car op-parse-result) ops)
-                ;; Update `lines` with remaining lines from `op-parse-result`
-                (setq lines (cdr op-parse-result))))
-          (setq lines (cdr lines)))))
+        (cond
+         ((string-match "^\\*\\*OP\\*\\* \\(\\w+\\)\\(?: \\(.*\\)\\)?" line)
+          ;; Process matched OP line
+          (let* ((op (match-string 1 line))
+                 (target (gptai--markdown-unbacktick (match-string 2 line)))
+                 (next-lines (cdr lines))
+                 (op-parse-result
+                  (if-let ((op-parser (gptai--create-op-parser op)))
+                      (gptai-parse-op op-parser target next-lines)
+                    (list 'error
+                          (format "Unknown operation type: %s" op)
+                          lines))))
+            (if (eq (car op-parse-result) 'error)
+                (setq parse-error op-parse-result)
+              (push (car op-parse-result) ops)
+              ;; Update `lines` with remaining lines from `op-parse-result`
+              (setq lines (cdr op-parse-result)))))
+         (t
+          (setq lines (cdr lines))))))
     (or parse-error (nreverse ops))))
 
 (defun gptai--markdown-unbacktick (str)
@@ -121,51 +116,80 @@ Returns ops list on success, or (error . message) on failure."
       (match-string 2 str)
     str))
 
-(defun gptai--parse-modify-op (target lines)
-  "Parse a MODIFY operation from TARGET and LINES.
-Returns (op-object . remain-lines) on success,
-or (list ''error message remain-lines) on failure."
+(defun gptai--create-op-parser (op)
+  "Construct the appropriate parser for the given operation type OP.
+
+Returns the corresponding parser, or nil if the operation type is unknown."
+  (pcase op
+    ("MODIFY" (gptai-make-modification-op-parser))
+    ("CREATE" (gptai-make-creation-op-parser))
+    ("DELETE" (gptai-make-deletion-op-parser))
+    (_ nil)))
+
+(cl-defgeneric gptai-parse-op (parser target lines)
+  "Parse the operation using a specific PARSER instance, TARGET, and LINES.")
+
+(cl-defstruct (gptai-op-parser (:constructor gptai-make-op-parser))
+  "Base class for all gptai operation parsers.")
+
+(cl-defstruct (gptai-modification-op-parser
+               (:include gptai-op-parser)
+               (:constructor gptai-make-modification-op-parser))
+  "Parser for modification operations.")
+
+(cl-defmethod gptai-parse-op
+  ((_parser gptai-modification-op-parser) target lines)
+  "Parse a modification operation from TARGET and LINES."
   (while (and lines (string-blank-p (car lines)))
     (setq lines (cdr lines)))
   (cond
    ((null lines)
     (list 'error "Empty input after skipping empty lines" lines))
 
+   ;; While we’ve instructed the LLM to use search/replace pairs, it doesn’t
+   ;; always follow faithfully.
    ((string-match "^\\(`\\{3,\\}\\)" (car lines))
     (let ((result (gptai--parse-code-block lines)))
       (if (eq (car result) 'error)
           result
-        (cons `((:type . MODIFY)
-                (:target . ,target)
-                (:full-content . ,(car result)))
+        (cons (gptai-make-modification-op
+               :target target
+               :full-content (car result))
               (cdr result)))))
 
    (t
     (let ((result (gptai--parse-search-replace-pairs lines)))
       (if (eq (car result) 'error)
           result
-        (cons `((:type . MODIFY)
-                (:target . ,target)
-                (:replacements . ,(car result)))
+        (cons (gptai-make-modification-op
+               :target target
+               :replacements (car result))
               (cdr result)))))))
 
-(defun gptai--parse-create-op (filename lines)
-  "Parse a CREATE operation from FILENAME and LINES.
-Returns (op-object . remain-lines) on success,
-or (list ''error message remain-lines) on failure."
+(cl-defstruct (gptai-creation-op-parser
+               (:include gptai-op-parser)
+               (:constructor gptai-make-creation-op-parser))
+  "Parser for creation operations.")
+
+(cl-defmethod gptai-parse-op ((_parser gptai-creation-op-parser) target lines)
+  "Parse a creation operation from TARGET and LINES."
   (let ((result (gptai--parse-code-block lines)))
     (if (eq (car result) 'error)
         result
-      (cons `((:type . CREATE)
-              (:filename . ,filename)
-              (:content . ,(car result)))
+      (cons (gptai-make-creation-op
+             :filename target
+             :content (car result))
             (cdr result)))))
 
-(defun gptai--make-delete-op (filename lines)
-  "Create a DELETE operation from FILENAME and LINES.
-Always succeeds, returning (op-object . remain-lines)."
-  (cons `((:type . DELETE)
-          (:filename . ,filename))
+(cl-defstruct (gptai-deletion-op-parser
+               (:include gptai-op-parser)
+               (:constructor gptai-make-deletion-op-parser))
+  "Parser for deletion operations.")
+
+(cl-defmethod gptai-parse-op ((_parser gptai-deletion-op-parser) target lines)
+  "Parse a deletion operation from TARGET and LINES."
+  (cons (gptai-make-deletion-op
+         :filename target)
         lines))
 
 (defun gptai--parse-search-replace-pairs (lines)
@@ -260,17 +284,31 @@ or (error . message) on failure."
                  (buffer-local-value 'default-directory working-buffer))
                 (project (project-current nil working-dir))
                 (project-root (gptai-context--project-root project))
-                (file-path (if (bufferp buffer-or-filename)
-                               (buffer-file-name buffer-or-filename)
-                             buffer-or-filename)))
+                (file-path
+                 (if (bufferp buffer-or-filename)
+                     (buffer-local-value 'default-directory buffer-or-filename)
+                   buffer-or-filename)))
       (file-in-directory-p file-path project-root)))))
 
-(defun gptai--apply-modify-op (op &optional dry-run)
-  "Apply a modify operation from OP.
+(cl-defgeneric gptai-execute (op &optional dry-run)
+  "Execute an operation OP. If DRY-RUN is non-nil, simulate the operation.")
 
-If DRY-RUN is non-nil, only search the modification without applying it."
-  (let ((buffer-name (alist-get :target op))
-        (replacements (alist-get :replacements op)))
+(cl-defstruct (gptai-op (:constructor gptai-make-op))
+  "Base class for all gptai operations.")
+
+(cl-defstruct (gptai-modification-op (:include gptai-op)
+                                     (:constructor gptai-make-modification-op))
+  "Represents a buffer modification operation."
+  target
+  replacements
+  full-content)
+
+(cl-defmethod gptai-execute ((op gptai-modification-op) &optional dry-run)
+  "Execute a modification operation OP.
+If DRY-RUN is non-nil, simulate the operation without making any changes."
+  (let ((buffer-name (gptai-modification-op-target op))
+        (replacements (gptai-modification-op-replacements op))
+        (full-content (gptai-modification-op-full-content op)))
     (message "Applying MODIFY%s: %s" (if dry-run "[dry-run]" "") buffer-name)
     ;; We require LLM to use buffer name, but LLM doesn't always follow it.
     (let ((op-buffer (or (get-buffer buffer-name)
@@ -281,12 +319,12 @@ If DRY-RUN is non-nil, only search the modification without applying it."
        ((not (gptai--is-in-project (current-buffer) op-buffer))
         (error "Modifications outside the working project are not allowed: %s"
                buffer-name))
-
-       ((alist-get :full-content op)
+       (full-content
         (with-current-buffer op-buffer
           (erase-buffer)
-          (insert (alist-get :full-content op))))
-
+          (insert full-content)
+          (when (buffer-file-name)
+            (save-buffer))))
        (t
         (with-current-buffer op-buffer
           (goto-char (point-min))
@@ -301,41 +339,47 @@ If DRY-RUN is non-nil, only search the modification without applying it."
           (when (buffer-file-name)
             (save-buffer))))))))
 
-(defun gptai--apply-create-op (op &optional dry-run)
-  "Apply a create operation from OP.
+(cl-defstruct (gptai-creation-op (:include gptai-op)
+                                 (:constructor gptai-make-creation-op))
+  "Represents a file creation operation."
+  filename
+  content)
 
-If DRY-RUN is non-nil, simulate the operation without modifying anything."
-  (let ((filename (alist-get :filename op))
-        (content (alist-get :content op)))
+(cl-defmethod gptai-execute ((op gptai-creation-op) &optional dry-run)
+  "Execute a creation operation OP.
+If DRY-RUN is non-nil, simulate the operation without creating the file."
+  (let ((filename (gptai-creation-op-filename op))
+        (content (gptai-creation-op-content op)))
     (message "Applying CREATE%s: %s" (if dry-run "[dry-run]" "") filename)
     (unless (gptai--is-in-project (current-buffer) filename)
       (error "Creating file outside the working project is not allowed: %s"
              filename))
     (when (file-exists-p filename)
       (error "File already exists: %s" filename))
-
     (unless dry-run
       (with-current-buffer (create-file-buffer filename)
         (insert content)
         (set-visited-file-name filename)
         (save-buffer)))))
 
-(defun gptai--apply-delete-op (op &optional dry-run)
-  "Apply a delete operation from OP with user confirmation.
+(cl-defstruct (gptai-deletion-op (:include gptai-op)
+                                 (:constructor gptai-make-deletion-op))
+  "Represents a file deletion operation."
+  filename)
 
-If DRY-RUN is non-nil, simulate deletion without making changes."
-  (let ((filename (alist-get :filename op)))
+(cl-defmethod gptai-execute ((op gptai-deletion-op) &optional dry-run)
+  "Execute a deletion operation OP.
+If DRY-RUN is non-nil, simulate deletion without actually removing the file."
+  (let ((filename (gptai-deletion-op-filename op)))
     (message "Applying DELETE%s: %s" (if dry-run "[dry-run]" "") filename)
     (unless (gptai--is-in-project (current-buffer) filename)
       (error "Deleting files outside the working project is not allowed: %s"
              filename))
     (unless (file-exists-p filename)
       (error "File not found: %s" filename))
-
     (unless dry-run
       (when-let ((file-buffer (get-file-buffer filename)))
         (kill-buffer file-buffer)))
-
     (unless dry-run
       (cond
        ((eq gptai--delete-confirmation 'never)
