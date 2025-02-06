@@ -467,7 +467,3 @@ See `gptel--url-get-response' for details."
 
 (provide 'gptel-aibo)
 ;;; gptel-aibo.el ends here
-
-;; Local Variables:
-;; flycheck-disabled-checkers: (emacs-lisp-package)
-;; End:
