@@ -39,24 +39,25 @@ its content, and applies any valid operations found in the response.
 
 See `gptai--apply-suggestions' for implementation details."
   (interactive)
-  (goto-char (point-max))
-  (if-let ((prop (text-property-search-backward 'gptel 'response t)))
-      (let ((working-buffer (get-text-property (prop-match-beginning prop)
-                                               'gptai--working-buffer)))
-        (cond
-         ((not working-buffer)
-          (message "The response has no gptai--working-buffer."))
-         ((not (buffer-live-p working-buffer))
-          (message "The response's working-buffer has been closed."))
-         (t
-          (let* ((begin (prop-match-beginning prop))
-                 (end (prop-match-end prop))
-                 (response (buffer-substring-no-properties begin end)))
-            (with-current-buffer working-buffer
-              (and
-               (eq (gptai--apply-suggestions response 'dry-run) t)
-               (gptai--apply-suggestions response)))))))
-    (message "No response found.")))
+  (save-excursion
+    (goto-char (point-max))
+    (if-let ((prop (text-property-search-backward 'gptel 'response t)))
+        (let ((working-buffer (get-text-property (prop-match-beginning prop)
+                                                 'gptai--working-buffer)))
+          (cond
+           ((not working-buffer)
+            (message "The response has no gptai--working-buffer."))
+           ((not (buffer-live-p working-buffer))
+            (message "The response's working-buffer has been closed."))
+           (t
+            (let* ((begin (prop-match-beginning prop))
+                   (end (prop-match-end prop))
+                   (response (buffer-substring-no-properties begin end)))
+              (with-current-buffer working-buffer
+                (and
+                 (eq (gptai--apply-suggestions response 'dry-run) t)
+                 (gptai--apply-suggestions response)))))))
+      (message "No response found."))))
 
 (defvar gptai--delete-confirmation nil
   "Stores user confirmation preference for file deletion.")
