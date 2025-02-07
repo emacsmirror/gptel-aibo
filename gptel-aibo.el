@@ -202,7 +202,11 @@ If a buffer's content exceeds this size, only its outline will be sent"
 (defvar-local gptai--ui-buffer nil
   "Current ui buffer of gptel-aibo.")
 
+(defvar-local gptai--old-directives nil)
+
 (defvar-local gptai--old-system-message nil)
+
+(defvar-local gptai--old-use-context nil)
 
 (defvar-local gptai--old-context-wrap-function nil)
 
@@ -231,25 +235,28 @@ If a buffer's content exceeds this size, only its outline will be sent"
         (if gptel-mode
             (setq gptai--from-gptel-mode gptel-mode)
           (gptel-mode 1))
+        (setq gptai--old-directives gptel-directives)
+        (setq-local gptel-directives (cons `(GPTAi . ,gptai--system-message)
+                                           gptel-directives))
         (setq gptai--old-system-message gptel--system-message)
-        (setq-local gptel-directives
-                    (cons `(GPTAi . ,gptai--system-message)
-                          (assq-delete-all 'GPTAi gptel-directives)))
         (setq-local gptel--system-message gptai--system-message)
+        (setq gptai--old-use-context gptel-use-context)
+        (setq-local gptel-use-context 'user)
+        (setq gptai--old-context-wrap-function gptel-context-wrap-function)
+        (setq-local gptel-context-wrap-function #'gptai-context-wrap)
+
         (setq gptai--ui-buffer (current-buffer))
         (setq gptai--working-buffer (other-buffer gptai--ui-buffer t))
         ;; (setq header-line-format
         ;;       (list '(:eval (concat "<"
         ;;                             (buffer-name gptai--working-buffer)
         ;;                             ">"))))
-        (setq gptai--old-context-wrap-function gptel-context-wrap-function)
-        (setq-local gptel-context-wrap-function #'gptai-context-wrap)
         (add-hook 'buffer-list-update-hook #'gptai-mode--check-buffer-list nil t)
         (message "gptai-mode enabled"))
     (remove-hook 'buffer-list-update-hook #'gptai-mode--check-buffer-list)
-    (setq-local gptel-directives
-                (assq-delete-all 'GPTAi gptel-directives))
+    (setq-local gptel-directives gptai--old-directives)
     (setq-local gptel--system-message gptai--old-system-message)
+    (setq-local gptel-use-context gptai--old-use-context)
     (setq-local gptel-context-wrap-function gptai--old-context-wrap-function)
     (unless gptai--from-gptel-mode
       (gptel-mode -1))
