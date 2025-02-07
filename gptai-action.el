@@ -104,10 +104,11 @@ Returns ops list on success, or (error . message) on failure."
     (while (and lines (not parse-error))
       (let ((line (car lines)))
         (cond
-         ((string-match "^\\*\\*OP\\*\\* \\(\\w+\\)\\(?: \\(.*\\)\\)?" line)
+         ((string-match "^\\*\\*OP\\*\\*\\s-+\\(\\w+\\)\\(.*\\)$" line)
           ;; Process matched OP line
           (let* ((op (match-string 1 line))
-                 (target (gptai--markdown-unbacktick (match-string 2 line)))
+                 (target (gptai--markdown-unbacktick
+                          (string-trim (match-string 2 line))))
                  (next-lines (cdr lines))
                  (op-parse-result
                   (if-let ((op-parser (gptai--create-op-parser op)))
