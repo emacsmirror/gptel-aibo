@@ -34,7 +34,15 @@
 (defun gptai-context-wrap (message contexts)
   "Wrap MESSAGE with CONTEXTS for gptel."
   (let ((context-string
-         (concat "---------------\n\nRequest context:\n\n"
+         (concat "---
+
+Request context:
+
+**Note**: This context reflects the *latest state* of the user's environment. \
+Previous suggested actions may be not executed, and the user may have made \
+arbitrary modifications outside this conversation.
+
+"
                  (gptai-context-info gptai--working-buffer)
                  (gptel-context--string contexts))))
     ;; (message "context: %s" context-string)

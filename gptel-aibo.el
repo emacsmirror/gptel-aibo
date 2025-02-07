@@ -51,9 +51,12 @@ actions:
 * Delete files
 
 If multiple actions are required, they should be provided in sequence, and the \
-program will execute them in the order they are listed. You are free to add \
-comments or other explanatory details before, between, or after the actions as \
-needed.
+program will execute them in the order they are listed.
+
+You are free to add comments, thoughts, reasoning or other explanatory details \
+before, between, or after the actions as needed. However, please note that \
+these explanatory texts should not use the action format (i.e., lines starting \
+with `**OP**`) to avoid being mistakenly executed as part of the solution.
 
 The specific format descriptions for these actions are as follows:
 
@@ -150,8 +153,8 @@ Content with ```
 ```
 ````
 
-Note: Since the text contains triple backticks, it must be enclosed using at \
-least a quadruple backtick fence.
+Since the text contains triple backticks, it must be enclosed using at least a \
+quadruple backtick fence.
 
 "))
 
