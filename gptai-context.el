@@ -38,8 +38,8 @@
 
 Request context:
 
-**Note**: This context reflects the *latest state* of the user's environment. \
-Previous suggested actions may be not executed, and the user may have made \
+**Note**: This context reflects the *latest state* of the user's environment.
+Previous suggested actions may be not executed, and the user may have made
 arbitrary modifications outside this conversation.
 
 "
