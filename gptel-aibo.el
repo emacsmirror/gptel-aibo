@@ -298,7 +298,12 @@ If a buffer's content exceeds this size, only its outline will be sent"
                   (t pair)))
                gptel-prompt-prefix-alist)))
     (unless gptai-mode (gptai-mode 1))
-    (if (bobp) (insert (gptel-prompt-prefix-string)))
+    (unless (local-variable-p 'gptai--console)
+      (setq-local gptai--console t)
+      (if (bobp) (insert (gptel-prompt-prefix-string)))
+      (when (and (bound-and-true-p evil-local-mode)
+                 (fboundp 'evil-insert-state))
+        (evil-insert-state)))
     (when (called-interactively-p 'any)
       (display-buffer (current-buffer) gptel-display-buffer-action))))
 
