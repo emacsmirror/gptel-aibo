@@ -124,33 +124,18 @@ Use a single-line command:
 
 ---
 
-### Handling Code Fences
+### Handling Code Block Fences
 
-When generating code blocks, dynamically adjust the fence length to ensure
-correct parsing.
-
-#### Rules
-
-1. Check the longest backtick sequence inside the content.
-2. Use a fence at least one backtick longer than the longest sequence.
-3. Ensure opening and closing fences match before returning.
-
-#### Examples
-
-````
-```
-Content with ```
-```
-````
-
-Since the text contains triple backticks, it must be enclosed using at least a
-quadruple backtick fence.
+When generating code blocks, use a fence long enough for proper parsing. If the
+content contains a sequence of three backticks, use four for the fence. If it
+contains four backticks, use five, and so on for longer sequences.
 
 ### Additional Notes
 
-You are free to add comments, thoughts, reasoning, or other explanatory details
-before, between, or after the actions as needed, but never starting a line with
-`**OP**`, to avoid them being mistakenly executed as part of the solution.
+You are free to add thoughts, reasoning, comments, or other relevant information
+before, between, or after the operations as needed, but never start a line of
+such content with `**OP**`, as it may be misinterpreted as an operation, or
+insert descriptive material inside an operation, as it may disrupt the parsing.
 "))
 
 (defvar gptai--complete-message

@@ -2,15 +2,15 @@
 
 **gptel-aibo** is an AI writing assistant system built on top of
 [gptel](https://github.com/karthink/gptel) .
-It helps users create and manage content in Emacs, including code, documentation,
-and even novels. It automatically sends the content (or a portion of it) that
-you're currently working on as you talk to the LLM, allowing you to refer to
-"this function", "this class", "this file", etc. You can then request the LLM’s
-help with creating your code, generating documentation, and many other things.
-Once a response is received, you can apply it using the command
-`gptai-apply-last-suggestions` (bound to `C-c !`).
+It helps you create and manage content in Emacs, including code, documentation,
+and even novels. As you talk to the LLM, it automatically sends the content (or
+a portion of it) that you're currently working on, allowing you to refer to
+elements like "this function," "this class," "this file," etc. It also defines
+an action set and its format with the LLM, so once a response is received, you
+can easily apply the suggestions with a single command (
+`gptai-apply-last-suggestions`, bound to `C-c !`).
 
-The term "aibo," meaning "partner," is currently ambiguous—it could refer to
+The term *aibo*, meaning partner, is currently ambiguous—it could refer to
 gptel’s partner, or the user’s.
 
 ## Installation
