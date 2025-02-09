@@ -213,7 +213,7 @@ If a buffer's content exceeds this size, only its outline will be sent"
 ;;;###autoload
 (define-minor-mode gptai-mode
   "Minor mode for gptel-aibo interacting with LLMs."
-  :lighter " GPTAi"
+  :lighter " GPTel-Aibo"
   :keymap gptai-mode-map
   (if gptai-mode
       (progn
@@ -221,7 +221,7 @@ If a buffer's content exceeds this size, only its outline will be sent"
             (setq gptai--from-gptel-mode gptel-mode)
           (gptel-mode 1))
         (setq gptai--old-directives gptel-directives)
-        (setq-local gptel-directives (cons `(GPTAi . ,gptai--system-message)
+        (setq-local gptel-directives (cons `(Aibo . ,gptai--system-message)
                                            gptel-directives))
         (setq gptai--old-system-message gptel--system-message)
         (setq-local gptel--system-message gptai--system-message)
@@ -292,6 +292,18 @@ If a buffer's content exceeds this size, only its outline will be sent"
     (when (called-interactively-p 'any)
       (display-buffer (current-buffer) gptel-display-buffer-action))))
 
+(defvar gptai-send--handlers
+  `((WAIT ,#'gptel--handle-wait)
+    (TYPE ,#'gptel--handle-pre-insert)
+    (ERRS ,#'gptel--handle-error ,#'gptel--fsm-last)
+    (TOOL ,#'gptel--handle-tool-use)
+    (DONE ,#'gptai--handle-post-insert
+          ,#'gptel--handle-post-insert
+          ,#'gptel--fsm-last))
+  "Alist specifying handlers for `gptai-send' state transitions.
+
+See `gptel-request--handlers' for details.")
+
 ;;;###autoload
 (defun gptai-send ()
   "Send the current context and request to GPT for processing."
@@ -307,10 +319,25 @@ If a buffer's content exceeds this size, only its outline will be sent"
 
   (gptel-request nil
     :stream gptel-stream
-    :callback (if gptel-stream #'gptai--stream-insert-response
-                #'gptai--insert-response)
     :context `(:working-buffer ,gptai--working-buffer)
-    :fsm (gptel-make-fsm :handlers gptel-send--handlers)))
+    :fsm (gptel-make-fsm :handlers gptai-send--handlers)))
+
+(defun gptai--handle-post-insert (fsm)
+  "Handle post-insert operations for FSM.
+
+Add text property ''gptai to the response."
+  (let* ((info (gptel-fsm-info fsm))
+         (working-context (plist-get info :context))
+         (working-buffer (plist-get working-context :working-buffer))
+         (start-marker (plist-get info :position))
+         (tracking-marker (or (plist-get info :tracking-marker)
+                              start-marker))
+         ;; start-marker may have been moved if :buffer was read-only
+         (gptel-buffer (marker-buffer start-marker)))
+    (unless (eq start-marker tracking-marker)
+      (with-current-buffer gptel-buffer
+        (add-text-properties start-marker tracking-marker
+                             `(gptai ,working-buffer))))))
 
 (defun gptai--insert-response (response info)
   "Insert the LLM RESPONSE into the gptel buffer.
@@ -332,8 +359,8 @@ See `gptel--url-get-response' for details."
         (save-excursion
           (add-text-properties
            0 (length response) `(gptel response
-                                 gptai--working-buffer ,working-buffer
-                                 front-sticky (gptel gptai--working-buffer))
+                                 gptai ,working-buffer
+                                 front-sticky (gptel gptai))
            response)
           (with-current-buffer (marker-buffer start-marker)
             (goto-char (or tracking-marker start-marker))
@@ -382,8 +409,8 @@ See `gptel--url-get-response' for details."
 
             (add-text-properties
              0 (length response) `(gptel response
-                                   gptai--working-buffer ,working-buffer
-                                   front-sticky (gptel gptai--woring-buffer))
+                                   gptai ,working-buffer
+                                   front-sticky (gptel gptai))
              response)
             (goto-char tracking-marker)
             ;; (run-hooks 'gptel-pre-stream-hook)
@@ -468,7 +495,7 @@ See `gptel--url-get-response' for details."
 ;;;###autoload
 (define-minor-mode gptai-complete-mode
   "Minor mode gptai llm completions."
-  :lighter " GPTAi-Complete"
+  :lighter " GPTel-Aibo-Complete"
   :keymap gptai-complete-mode-map)
 
 (provide 'gptel-aibo)

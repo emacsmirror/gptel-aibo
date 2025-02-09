@@ -42,11 +42,11 @@ See `gptai--apply-suggestions' for implementation details."
   (save-excursion
     (goto-char (point-max))
     (if-let ((prop (text-property-search-backward 'gptel 'response t)))
-        (let ((working-buffer (get-text-property (prop-match-beginning prop)
-                                                 'gptai--working-buffer)))
+        (let ((working-buffer
+               (get-text-property (prop-match-beginning prop) 'gptai)))
           (cond
            ((not working-buffer)
-            (message "The response has no gptai--working-buffer."))
+            (message "The response has no working-buffer."))
            ((not (buffer-live-p working-buffer))
             (message "The response's working-buffer has been closed."))
            (t

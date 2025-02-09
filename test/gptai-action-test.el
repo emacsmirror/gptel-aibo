@@ -633,9 +633,8 @@ lines remain
        (should (file-exists-p filename2))
        (with-temp-buffer
          (add-text-properties
-          0 (length response) `(gptel response
-                                gptai--working-buffer ,working-buffer
-                                front-sticky (gptel gptai--woring-buffer))
+          0 (length response)
+          `(gptel response gptai ,working-buffer)
           response)
          (insert response)
          (cl-letf (((symbol-function 'read-char-choice)
