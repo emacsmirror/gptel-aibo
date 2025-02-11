@@ -32,10 +32,14 @@
 (require 'imenu)
 
 (defcustom gptel-aibo-max-buffer-size 16000
-  "The maximum size of working buffer's content to include in the context.
+  "The maximum size of the buffer's content to include in the context.
 
-If the working buffer's content exceeds this size, only the context fragment
-will be sent"
+If the working buffer's content exceeds this size, only a fragment of the
+context around the cursor (e.g., a function or a class) will be sent.
+
+For other buffers in the same project: if their size exceeds this limit and
+they have an outline, only the outline will be sent; otherwise, their content
+will be discarded."
   :type 'natnum
   :group 'gptel-aibo
   :safe #'natnump)

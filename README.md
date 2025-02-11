@@ -77,7 +77,8 @@ taking away their favorite key. You can also bind your own key, for example:
 (use-package! gptel-aibo
   :after (gptel)
   :config
-  (define-key gptel-aibo-complete-mode-map (kbd "C-c i") #'gptel-aibo-complete-at-point)
+  (define-key gptel-aibo-complete-mode-map
+              (kbd "C-c i") #'gptel-aibo-complete-at-point)
   (add-hook 'prog-mode-hook #'gptel-aibo-complete-mode))
 ```
 
@@ -101,12 +102,16 @@ taking away their favorite key. You can also bind your own key, for example:
 ## Customization
 - `gptel-aibo-max-buffer-size`
 
-  The size limit for the working buffer (the buffer you are currently working
-  on) that is automatically sent to the LLM.
+  The size limit for the buffers that is automatically sent to the LLM.
   
-  If the buffer exceeds this size, only a portion of the content around the
-  cursor (typically a function or class) will be sent. 
-  
+  If the working buffer (the buffer you are currently working on) exceeds this
+  size, only a fragment of content around the cursor (typically a function or
+  class) will be sent.
+
+  For other buffers in the same project: if their size exceeds this limit and
+  they have an outline available, only the outline will be sent. Otherwise, 
+  their content will not be sent.
+
   The default value is 16000.
 
 - `gptel-aibo-max-buffer-count`
