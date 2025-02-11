@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: emacs tools editing gptel ai assistant code-completion productivity
 ;; Homepage: https://github.com/dolmens/gptel-aibo
-;; Package-Requires: ((emacs "27.1") (gptel "0.9.0"))
+;; Package-Requires: ((emacs "27.1") (gptel "20250211"))
 
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
