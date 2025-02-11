@@ -78,95 +78,282 @@ and the second is the associated file path."
     ;; No project
     (should-not (gptel-aibo--project-buffers buf1)))))
 
-(ert-deftest test-gptel-aibo--working-buffer-info ()
-  (with-temp-buffer
-    (insert "hello")
-    (let ((content "Content:
-```fundamental
-hello
-```
-")
-          (fragment-before-line "Fragment before the cursor:\n")
-          (fragment-after-line "Fragment after the cursor:\n"))
-
-      (let* ((gptel-aibo-max-buffer-size 10240)
-             (info (gptel-aibo--working-buffer-info)))
-        (should (string-match-p (regexp-quote content) info))
-        (should (string-match-p (regexp-quote fragment-before-line) info))
-        (should (string-match-p (regexp-quote fragment-after-line) info)))
-
-      (let* ((gptel-aibo-max-buffer-size 2)
-             (info (gptel-aibo--working-buffer-info)))
-        (should-not (string-match-p (regexp-quote content) info))
-        (should (string-match-p (regexp-quote fragment-before-line) info))
-        (should (string-match-p (regexp-quote fragment-after-line) info))))))
-
-(ert-deftest test-gptel-aibo--project-buffers-info ()
-  (with-temp-directory
-   dir
-   (with-multi-temp-buffers-attatch
-    ((buf1 (expand-file-name "file1.txt" dir))
-     (buf2 (expand-file-name "file2.txt" dir)))
-    (with-current-buffer buf2
-      (insert "hello"))
-    (let ((content "Content:
-```fundamental
-hello
-```
-"))
-      (cl-letf (((symbol-function 'project-current)
-                 (lambda (&optional _)
-                   (list 'transient default-directory))))
-
-        (let* ((gptel-aibo-max-buffer-size 10240)
-               (info (gptel-aibo--project-buffers-info buf1)))
-          (should (string-match-p (regexp-quote content) info)))
-
-        (let* ((gptel-aibo-max-buffer-size 2)
-               (info (gptel-aibo--project-buffers-info buf1)))
-          ;; no outline, empty info
-          (should (equal info "")))
-
-        (with-current-buffer buf2
-          (setq imenu-create-index-function
-                (lambda ()
-                  (list
-                   (cons "f" 1)
-                   ))))
-        (let* ((gptel-aibo-max-buffer-size 2)
-               (info (gptel-aibo--project-buffers-info buf1))
-               (outline "Outline:
-- f
-
-"))
-          (should (string-match-p (regexp-quote outline) info))))))))
-
-(ert-deftest test-gptel-aibo-max-buffer-count ()
+(ert-deftest test-gptel-aibo-context-info ()
   (with-temp-directory
    dir
    (with-multi-temp-buffers-attatch
     ((buf1 (expand-file-name "file1.txt" dir))
      (buf2 (expand-file-name "file2.txt" dir))
      (buf3 (expand-file-name "file3.txt" dir)))
+    (with-current-buffer buf1
+      (insert "hello"))
+    (with-current-buffer buf2
+      (insert "world"))
+    (with-current-buffer buf3
+      (insert "ok"))
     (cl-letf (((symbol-function 'project-current)
                (lambda (&optional _)
                  (list 'transient default-directory))))
 
-      (let* ((gptel-aibo-max-buffer-count 2)
-             (info (gptel-aibo--project-buffers-info buf1)))
-        (should (equal
-                 (cl-count-if
-                  (lambda (line) (string-prefix-p "Filepath: " line))
-                  (split-string info "\n"))
-                 2)))
+      (let* ((expect (format "Current working buffer: `%s`
 
-      (let* ((gptel-aibo-max-buffer-count 1)
+Filepath: `%s`
+Content:
+```fundamental
+hello
+```
+
+Fragment before the cursor:
+```
+hello
+```
+
+Fragment after the cursor:
+(cursor is at the end of the buffer)
+
+
+Other buffers in the same project:
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+world
+```
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+ok
+```
+
+
+"
+                             (buffer-name buf1)
+                             (buffer-file-name buf1)
+                             (buffer-name buf2)
+                             (buffer-file-name buf2)
+                             (buffer-name buf3)
+                             (buffer-file-name buf3)))
+             (gptel-aibo-max-buffer-size 10240)
+             (gptel-aibo-max-buffer-count 2)
+             (info (gptel-aibo-context-info buf1)))
+        (should (equal info expect)))))))
+
+(ert-deftest test-gptel-aibo--working-buffer-info ()
+  (with-temp-buffer
+    (insert "hello")
+    (let* ((expect (format "Current working buffer: `%s`
+
+Filepath: (not associated with a file)
+Content:
+```fundamental
+hello
+```
+
+Fragment before the cursor:
+```
+hello
+```
+
+Fragment after the cursor:
+(cursor is at the end of the buffer)
+" (buffer-name)))
+           (gptel-aibo-max-buffer-size 10240)
+           (info (gptel-aibo--working-buffer-info)))
+      (should (equal info expect)))
+
+    (let* ((expect (format "Current working buffer: `%s`
+
+Filepath: (not associated with a file)
+
+Fragment before the cursor:
+```
+hello
+```
+
+Fragment after the cursor:
+(cursor is at the end of the buffer)
+" (buffer-name)))
+           (gptel-aibo-max-buffer-size 2)
+           (info (gptel-aibo--working-buffer-info)))
+      (should (equal info expect)))))
+
+(ert-deftest test-gptel-aibo--fragment-info ()
+  (with-temp-buffer
+    (insert "hello")
+    (let* ((expect "Fragment before the cursor:
+```
+hello
+```
+
+Fragment after the cursor:
+(cursor is at the end of the buffer)
+")
+           (gptel-aibo-max-buffer-size 10240)
+           (gptel-aibo-max-fragment-size 1024)
+           (info (gptel-aibo--fragment-info)))
+      (should (equal info expect)))
+
+    (goto-char (point-min))
+    (let* ((expect "Fragment before the cursor:
+(cursor is at the beginning of the buffer)
+
+Fragment after the cursor:
+```
+hello
+```
+")
+           (gptel-aibo-max-buffer-size 10240)
+           (gptel-aibo-max-fragment-size 1024)
+           (info (gptel-aibo--fragment-info)))
+      (should (equal info expect)))
+
+    (goto-char 3)
+    (let* ((expect "Fragment before the cursor:
+```
+he
+```
+
+Fragment after the cursor:
+```
+llo
+```
+")
+           (gptel-aibo-max-buffer-size 10240)
+           (gptel-aibo-max-fragment-size 1024)
+           (info (gptel-aibo--fragment-info)))
+      (should (equal info expect)))
+
+    (let* ((expect "Fragment before the cursor:
+...
+```
+e
+```
+
+Fragment after the cursor:
+```
+l
+```
+...
+")
+           (gptel-aibo-max-buffer-size 10240)
+           (gptel-aibo-max-fragment-size 2)
+           (info (gptel-aibo--fragment-info)))
+      (should (equal info expect)))
+    ))
+
+(ert-deftest test-gptel-aibo--project-buffers-info ()
+  (with-temp-directory
+   dir
+   (with-multi-temp-buffers-attatch
+    ((buf1 (expand-file-name "file1.txt" dir))
+     (buf2 (expand-file-name "file2.txt" dir))
+     (buf3 (expand-file-name "file3.txt" dir)))
+    (with-current-buffer buf2
+      (insert "hello"))
+    (cl-letf (((symbol-function 'project-current)
+               (lambda (&optional _)
+                 (list 'transient default-directory))))
+
+      (let* ((expect (format "Other buffers in the same project:
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+hello
+```
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+
+```
+
+
+"
+                             (buffer-name buf2)
+                             (buffer-file-name buf2)
+                             (buffer-name buf3)
+                             (buffer-file-name buf3)))
+             (gptel-aibo-max-buffer-size 10240)
+             (gptel-aibo-max-buffer-count 2)
              (info (gptel-aibo--project-buffers-info buf1)))
-        (should (equal
-                 (cl-count-if
-                  (lambda (line) (string-prefix-p "Filepath: " line))
-                  (split-string info "\n"))
-                 1)))))))
+        (should (equal info expect)))
+
+      ;; Test buffer count limit
+      ;; One buffer exceeds size, no outline, just skip the buffer
+      (let* ((expect (format "Other buffers in the same project:
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+
+```
+
+
+"
+                             (buffer-name buf3)
+                             (buffer-file-name buf3)))
+             (gptel-aibo-max-buffer-size 2)
+             (gptel-aibo-max-buffer-count 2)
+             (info (gptel-aibo--project-buffers-info buf1)))
+        (should (equal info expect)))
+
+      (with-current-buffer buf2
+        (setq imenu-create-index-function
+              (lambda ()
+                (list
+                 (cons "f" 1)
+                 ))))
+      (let* ((expect (format "Other buffers in the same project:
+
+`%s`:
+Filepath: `%s`
+Outline:
+- f
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+
+```
+
+
+"
+                             (buffer-name buf2)
+                             (buffer-file-name buf2)
+                             (buffer-name buf3)
+                             (buffer-file-name buf3)))
+             (gptel-aibo-max-buffer-size 2)
+             (gptel-aibo-max-buffer-count 2)
+             (info (gptel-aibo--project-buffers-info buf1)))
+        (should (equal info expect)))
+
+      ;; Test buffer count limit
+      (let* ((expect (format "Other buffers in the same project:
+
+`%s`:
+Filepath: `%s`
+Content:
+```fundamental
+hello
+```
+
+
+"
+                             (buffer-name buf2)
+                             (buffer-file-name buf2)))
+             (gptel-aibo-max-buffer-size 10240)
+             (gptel-aibo-max-buffer-count 1)
+             (info (gptel-aibo--project-buffers-info buf1)))
+        (should (equal info expect)))
+      ))))
 
 (ert-deftest test-gptel-aibo--fragment ()
   (with-temp-buffer

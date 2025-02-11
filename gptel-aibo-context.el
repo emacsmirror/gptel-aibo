@@ -86,22 +86,30 @@ arbitrary modifications outside this conversation.
 (defun gptel-aibo--working-buffer-info (&optional buffer)
   "Get context information about BUFFER."
   (with-current-buffer (or buffer (current-buffer))
-    (let* ((point (point))
-           (widen-point-max (save-restriction (widen) (point-max)))
-           (active-buffer-size (- (point-max) (point-min)))
-           (context-fragment-boundaries
-            (gptel-aibo--fragment-boundaries
-             (if (<= active-buffer-size gptel-aibo-max-buffer-size)
-                 gptel-aibo-max-fragment-size
-               gptel-aibo-max-buffer-size)))
-           (before-start (car context-fragment-boundaries))
-           (after-end (cdr context-fragment-boundaries)))
+    (let* ((active-buffer-size (- (point-max) (point-min))))
       (concat
        (format "Current working buffer: `%s`\n\n" (buffer-name))
        (if (<= active-buffer-size gptel-aibo-max-buffer-size)
            (gptel-aibo--buffer-info)
          (gptel-aibo--buffer-filename-info))
        "\n"
+       (gptel-aibo--fragment-info)))))
+
+(defun gptel-aibo--fragment-info (&optional buffer)
+  "Get fragment information around cursor about BUFFER."
+  (with-current-buffer (or buffer (current-buffer))
+    (let* ((point (point))
+           (widen-point-max (save-restriction (widen) (point-max)))
+           (active-buffer-size (- (point-max) (point-min)))
+           (max-length (if (<= active-buffer-size gptel-aibo-max-buffer-size)
+                           gptel-aibo-max-fragment-size
+                         (max gptel-aibo-max-fragment-size
+                              gptel-aibo-max-buffer-size)))
+           (context-fragment-boundaries
+            (gptel-aibo--fragment-boundaries max-length))
+           (before-start (car context-fragment-boundaries))
+           (after-end (cdr context-fragment-boundaries)))
+      (concat
        "Fragment before the cursor:\n"
        (if (= point 1)
            "(cursor is at the beginning of the buffer)"
@@ -116,7 +124,8 @@ arbitrary modifications outside this conversation.
           (gptel-aibo--make-code-block
            (buffer-substring-no-properties point after-end))
           (unless (= after-end widen-point-max)
-            "\n...")))))))
+            "\n...")))
+       "\n\n"))))
 
 (defun gptel-aibo--buffer-info (&optional buffer)
   "Get buffer information including file path and content.
@@ -254,11 +263,11 @@ The total size of the returned information will be limited by QUOTA."
                 (equal (project-current) project-current))))
        (buffer-list)))))
 
-(defun gptel-aibo--fragment (max-context-length)
+(defun gptel-aibo--fragment (max-length)
   "Extract the text fragment around the point.
 
-The total length is limited by MAX-CONTEXT-LENGTH"
-  (let* ((boundaries (gptel-aibo--fragment-boundaries max-context-length))
+The total length is limited by MAX-LENGTH"
+  (let* ((boundaries (gptel-aibo--fragment-boundaries max-length))
          (start (car boundaries))
          (end (cdr boundaries))
          (before-text (buffer-substring-no-properties start (point)))
@@ -266,8 +275,8 @@ The total length is limited by MAX-CONTEXT-LENGTH"
     (cons before-text after-text)))
 
 (defun gptel-aibo--fragment-boundaries
-    (max-context-length &optional buffer pos)
-  "Compute context boundaries around POS within MAX-CONTEXT-LENGTH chars.
+    (max-length &optional buffer pos)
+  "Compute context boundaries around POS within MAX-LENGTH chars.
 
 BUFFER is the buffer to use, or the current buffer if nil.
 POS is the position to center on, or the current point if nil."
@@ -286,20 +295,20 @@ POS is the position to center on, or the current point if nil."
            (after-len (- after-end pos))
            (total-len (+ before-len after-len)))
 
-      (if (<= total-len max-context-length)
+      (if (<= total-len max-length)
           (cons before-start after-end)
 
-        (let* ((half-limit (/ max-context-length 2))
-               (tolerance-limit (* max-context-length 0.6)))
+        (let* ((half-limit (/ max-length 2))
+               (tolerance-limit (* max-length 0.6)))
           (cond
            ((and (<= before-len tolerance-limit)
                  (<= before-len after-len))
             (cons before-start
-                  (+ pos (- max-context-length before-len))))
+                  (+ pos (- max-length before-len))))
 
            ((and (<= after-len tolerance-limit)
                  (<= after-len before-len))
-            (cons (- pos (- max-context-length after-len))
+            (cons (- pos (- max-length after-len))
                   after-end))
 
            (t
