@@ -109,7 +109,7 @@ taking away their favorite key. You can also bind your own key, for example:
   class) will be sent.
 
   For other buffers in the same project: if their size exceeds this limit and
-  they have an outline available, only the outline will be sent. Otherwise, 
+  they have an outline available, only the outline will be sent. Otherwise,
   their content will not be sent.
 
   The default value is 16000.
