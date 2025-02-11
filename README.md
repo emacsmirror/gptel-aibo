@@ -29,9 +29,10 @@ In your `packages.el`, add this line:
 (package! gptel-aibo :recipe (:host github :repo "dolmens/gptel-aibo"))
 ```
 **Note**: In the `gptel-aibo` interface, it overrides the `flycheck` keybinding
-`C-c !` (you generally won't need to use `flycheck` in the `gptel-aibo` interface,
-especially with the shortcut key). Therefore, if you want to configure further
-using `use-package!`, make sure `gptel-aibo` is loaded after `flycheck`.
+`C-c !` (you generally won't need to use `flycheck` in the `gptel-aibo`
+interface, especially with the shortcut key). Therefore, if you want to
+configure further using `use-package!`, make sure `gptel-aibo` is loaded after 
+`flycheck`.
 ```elisp
 (use-package! gptel-aibo
   :after (gptel flycheck))
@@ -46,12 +47,12 @@ Alternatively, define a different keybinding:
 ```
 
 ## Usage
-With the `gptel-abo` interactive command, you can open or switch to an existing
+With the `gptel-aibo` interactive command, you can open or switch to an existing
 `gptel-aibo` console, which is a `markdown` page with the `gptel-aibo` minor
 mode enabled, an extension of `gptel-mode`.
 
 To get started, open your file, move the cursor to the section you're working
-on, and then switch to the gptel-aio console. There, you can talk to the LLM
+on, and then switch to the gptel-aibo console. There, you can talk to the LLM
 and receive suggestions. Use `gptel-aibo-send` to send your request, which is
 bound to `C-c RET`, just like the send command in `gptel-mode`.
 
