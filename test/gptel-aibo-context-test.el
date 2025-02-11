@@ -284,7 +284,7 @@ Content:
              (info (gptel-aibo--project-buffers-info buf1)))
         (should (equal info expect)))
 
-      ;; Test buffer count limit
+      ;; Test buffer size limit
       ;; One buffer exceeds size, no outline, just skip the buffer
       (let* ((expect (format "Other buffers in the same project:
 
@@ -352,8 +352,7 @@ hello
              (gptel-aibo-max-buffer-size 10240)
              (gptel-aibo-max-buffer-count 1)
              (info (gptel-aibo--project-buffers-info buf1)))
-        (should (equal info expect)))
-      ))))
+        (should (equal info expect)))))))
 
 (ert-deftest test-gptel-aibo--fragment ()
   (with-temp-buffer
@@ -422,6 +421,60 @@ void hello() {
                    '("class Cat {\nvoid hello() {\n"
                      .
                      "\n}\n")))))
+
+
+(ert-deftest test-gptel-aibo--fragment-trimming-after ()
+  (with-temp-buffer
+    (let ((f1 "void f1() {  }\n")
+          (f2 "void f2() {
+//lines
+//lines
+//lines
+//lines
+}
+"))
+      (insert f1)
+      (insert f2)
+      (c++-mode)
+
+      (goto-char (point-min))
+      (forward-line 1)
+      (should (equal (gptel-aibo--fragment 1024)
+                     (cons f1 f2)))
+
+      ;; Before is small, trim after
+      (should (equal (gptel-aibo--fragment 25)
+                    (cons f1 "void f2() ")))
+
+      ;; Trim both
+      (should (equal (gptel-aibo--fragment 20)
+                    (cons "f1() {  }\n" "void f2() ")))
+      )))
+
+(ert-deftest test-gptel-aibo--fragment-trimming-before ()
+  (with-temp-buffer
+    (let ((f1 "void f1() {  }\n")
+          (f2 "void f2() {
+//lines
+//lines
+//lines
+//lines
+}
+"))
+      (insert f2)
+      (insert f1)
+      (c++-mode)
+
+      (goto-char (point-min))
+      (forward-line 6)
+      (should (equal (gptel-aibo--fragment 1024)
+                     (cons f2 f1)))
+
+      ;; After is small, trim before
+      (should (equal (gptel-aibo--fragment 25)
+                    (cons "//lines\n}\n" f1)))
+      )))
+
 
 (ert-deftest test-gptel-aibo--make-code-block ()
   (should (equal (gptel-aibo--make-code-block "aa`bb")
