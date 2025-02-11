@@ -159,6 +159,7 @@ hello
 
 Fragment after the cursor:
 (cursor is at the end of the buffer)
+
 " (buffer-name)))
            (gptel-aibo-max-buffer-size 10240)
            (info (gptel-aibo--working-buffer-info)))
@@ -175,6 +176,7 @@ hello
 
 Fragment after the cursor:
 (cursor is at the end of the buffer)
+
 " (buffer-name)))
            (gptel-aibo-max-buffer-size 2)
            (info (gptel-aibo--working-buffer-info)))
@@ -190,6 +192,7 @@ hello
 
 Fragment after the cursor:
 (cursor is at the end of the buffer)
+
 ")
            (gptel-aibo-max-buffer-size 10240)
            (gptel-aibo-max-fragment-size 1024)
@@ -204,6 +207,7 @@ Fragment after the cursor:
 ```
 hello
 ```
+
 ")
            (gptel-aibo-max-buffer-size 10240)
            (gptel-aibo-max-fragment-size 1024)
@@ -220,12 +224,32 @@ Fragment after the cursor:
 ```
 llo
 ```
+
 ")
            (gptel-aibo-max-buffer-size 10240)
-           (gptel-aibo-max-fragment-size 1024)
+           (gptel-aibo-max-fragment-size 2)
            (info (gptel-aibo--fragment-info)))
       (should (equal info expect)))
 
+    ;; Trimmed, but expanded
+    (let* ((expect "Fragment before the cursor:
+```
+he
+```
+
+Fragment after the cursor:
+```
+llo
+```
+
+")
+           (gptel-aibo-max-buffer-size 10240)
+           (gptel-aibo-max-fragment-size 2)
+           (gptel-aibo-max-fragment-expand 1024)
+           (info (gptel-aibo--fragment-info)))
+      (should (equal info expect)))
+
+    ;; Trimmed
     (let* ((expect "Fragment before the cursor:
 ...
 ```
@@ -237,9 +261,11 @@ Fragment after the cursor:
 l
 ```
 ...
+
 ")
            (gptel-aibo-max-buffer-size 10240)
            (gptel-aibo-max-fragment-size 2)
+           (gptel-aibo-max-fragment-expand nil)
            (info (gptel-aibo--fragment-info)))
       (should (equal info expect)))
     ))
@@ -448,8 +474,7 @@ void hello() {
 
       ;; Trim both
       (should (equal (gptel-aibo--fragment 20)
-                    (cons "f1() {  }\n" "void f2() ")))
-      )))
+                    (cons "f1() {  }\n" "void f2() "))))))
 
 (ert-deftest test-gptel-aibo--fragment-trimming-before ()
   (with-temp-buffer
@@ -472,8 +497,34 @@ void hello() {
 
       ;; After is small, trim before
       (should (equal (gptel-aibo--fragment 25)
-                    (cons "//lines\n}\n" f1)))
-      )))
+                    (cons "//lines\n}\n" f1))))))
+
+(ert-deftest test-gptel-aibo--fragment-trimming-expand ()
+  (with-temp-buffer
+    (let ((f1 "void f1() {  }\n")
+          (f2 "void f2() {
+//lines
+//lines
+//lines
+//lines
+}
+"))
+      (insert f1)
+      (insert f2)
+      (c++-mode)
+
+      (goto-char (point-min))
+      (forward-line 1)
+      (should (equal (gptel-aibo--fragment 1024)
+                     (cons f1 f2)))
+
+      ;; Before is small, trim after, expand
+      (should (equal (gptel-aibo--fragment 25 20)
+                    (cons f1 "void f2() {")))
+
+      ;; Trim both, expand
+      (should (equal (gptel-aibo--fragment 20 20)
+                    (cons "void f1() {  }\n" "void f2() {"))))))
 
 
 (ert-deftest test-gptel-aibo--make-code-block ()

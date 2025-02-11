@@ -52,6 +52,12 @@ will be sent"
   :group 'gptel-aibo
   :safe #'natnump)
 
+(defcustom gptel-aibo-max-fragment-expand 80
+  "Maximum size (in characters) for context fragments expand line size."
+  :type 'natnum
+  :group 'gptel-aibo
+  :safe #'natnump)
+
 (defvar-local gptel-aibo--working-buffer nil
   "Current working buffer of gptel-aibo.")
 
@@ -80,7 +86,7 @@ arbitrary modifications outside this conversation.
 (defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."
   (concat (gptel-aibo--working-buffer-info buffer)
-          "\n\n"
+          "\n"
           (gptel-aibo--project-buffers-info buffer)))
 
 (defun gptel-aibo--working-buffer-info (&optional buffer)
@@ -106,7 +112,9 @@ arbitrary modifications outside this conversation.
                          (max gptel-aibo-max-fragment-size
                               gptel-aibo-max-buffer-size)))
            (context-fragment-boundaries
-            (gptel-aibo--fragment-boundaries max-length))
+            (gptel-aibo--fragment-boundaries
+             max-length
+             gptel-aibo-max-fragment-expand))
            (before-start (car context-fragment-boundaries))
            (after-end (cdr context-fragment-boundaries)))
       (concat
@@ -263,11 +271,14 @@ The total size of the returned information will be limited by QUOTA."
                 (equal (project-current) project-current))))
        (buffer-list)))))
 
-(defun gptel-aibo--fragment (max-length)
+(defun gptel-aibo--fragment (max-length &optional expand-line-limit)
   "Extract the text fragment around the point.
 
-The total length is limited by MAX-LENGTH"
-  (let* ((boundaries (gptel-aibo--fragment-boundaries max-length))
+The total length is limited by MAX-LENGTH.
+EXPAND-LINE-LIMIT, if non-nil, allows extending boundaries to the beginning
+or end of the line if truncation occurs and the distance is within the limit."
+  (let* ((boundaries
+          (gptel-aibo--fragment-boundaries max-length expand-line-limit))
          (start (car boundaries))
          (end (cdr boundaries))
          (before-text (buffer-substring-no-properties start (point)))
@@ -275,9 +286,11 @@ The total length is limited by MAX-LENGTH"
     (cons before-text after-text)))
 
 (defun gptel-aibo--fragment-boundaries
-    (max-length &optional buffer pos)
+    (max-length &optional expand-line-limit buffer pos)
   "Compute context boundaries around POS within MAX-LENGTH chars.
 
+EXPAND-LINE-LIMIT, if non-nil, allows extending boundaries to the beginning
+or end of the line if truncation occurs and the distance is within the limit.
 BUFFER is the buffer to use, or the current buffer if nil.
 POS is the position to center on, or the current point if nil."
   (with-current-buffer (or buffer (current-buffer))
@@ -299,21 +312,36 @@ POS is the position to center on, or the current point if nil."
           (cons before-start after-end)
 
         (let* ((half-limit (/ max-length 2))
-               (tolerance-limit (* max-length 0.6)))
-          (cond
-           ((and (<= before-len tolerance-limit)
-                 (<= before-len after-len))
-            (cons before-start
-                  (+ pos (- max-length before-len))))
+               (tolerance-limit (* max-length 0.6))
+               (boundary
+                (cond
+                 ((and (<= before-len tolerance-limit)
+                       (<= before-len after-len))
+                  (cons before-start
+                        (+ pos (- max-length before-len))))
 
-           ((and (<= after-len tolerance-limit)
-                 (<= after-len before-len))
-            (cons (- pos (- max-length after-len))
-                  after-end))
+                 ((and (<= after-len tolerance-limit)
+                       (<= after-len before-len))
+                  (cons (- pos (- max-length after-len))
+                        after-end))
 
-           (t
-            (cons (- pos half-limit)
-                  (+ pos half-limit)))))))))
+                 (t
+                  (cons (- pos half-limit)
+                        (+ pos half-limit))))))
+          (when expand-line-limit
+            (save-excursion
+              (goto-char (car boundary))
+              (when (and (/= (point) (line-beginning-position))
+                         (<= (- (point) (line-beginning-position))
+                             expand-line-limit))
+                (setcar boundary (line-beginning-position))))
+            (save-excursion
+              (goto-char (cdr boundary))
+              (when (and (/= (point) (line-end-position))
+                         (<= (- (line-end-position) (point))
+                             expand-line-limit))
+                (setcdr boundary (line-end-position)))))
+          boundary)))))
 
 (defun gptel-aibo--unique-region-p (beg end)
   "Check if the text between BEG and END appears uniquely in the buffer.
