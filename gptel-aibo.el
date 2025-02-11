@@ -35,14 +35,14 @@
 
 ;;; Code:
 
-(defvar gptai--system-role
+(defvar gptel-aibo--system-role
   "You are an expert assistant specializing in helping users with Emacs for
 creating and managing various types of content, including code, documents,
 and even novels.")
 
-(defvar gptai--system-message
+(defvar gptel-aibo--system-message
   (concat
-   gptai--system-role
+   gptel-aibo--system-role
    "\n"
    "
 Based on the user's request, you can generate one or more of the following actions:
@@ -138,7 +138,7 @@ such content with `**OP**`, as it may be misinterpreted as an operation, or
 insert descriptive material inside an operation, as it may disrupt the parsing.
 "))
 
-(defvar gptai--complete-message
+(defvar gptel-aibo--complete-message
   "
 Your task:
 Suggest content suitable for insertion at the cursor position.
@@ -152,120 +152,88 @@ the surrounding text.
 4. Do not call tools or ask questions to obtain additional information. If no
 suitable content can be suggested, return an empty string.")
 
-(defcustom gptai--max-buffer-size 16000
-  "The maximum size of working buffer's content to include in the context.
-
-If the working buffer's content exceeds this size, only the context fragment
-will be sent"
-  :type 'natnum
-  :group 'gptai
-  :safe #'natnump)
-
-(defcustom gptai--max-context-fragment-size 1024
-  "Maximum size (in characters) for context fragments around cursor position."
-  :type 'natnum
-  :group 'gptai
-  :safe #'natnump)
-
-(defcustom gptai--max-project-buffer-count 2
-  "The maximum number of buffers to include in the project context."
-  :type 'natnum
-  :group 'gptai
-  :safe #'natnump)
-
-(defcustom gptai--max-project-buffer-size 16000
-  "The maximum size of a buffer's content to include in the project context.
-
-If a buffer's content exceeds this size, only its outline will be sent"
-  :type 'natnum
-  :group 'gptai
-  :safe #'natnump)
-
-(defvar-local gptai--working-buffer nil
-  "Current working buffer of gptel-aibo.")
-
-(defvar-local gptai--ui-buffer nil
+(defvar-local gptel-aibo--ui-buffer nil
   "Current ui buffer of gptel-aibo.")
 
-(defvar-local gptai--old-directives nil)
+(defvar-local gptel-aibo--old-directives nil)
 
-(defvar-local gptai--old-system-message nil)
+(defvar-local gptel-aibo--old-system-message nil)
 
-(defvar-local gptai--old-use-context nil)
+(defvar-local gptel-aibo--old-use-context nil)
 
-(defvar-local gptai--old-context-wrap-function nil)
+(defvar-local gptel-aibo--old-context-wrap-function nil)
 
-(defvar-local gptai--from-gptel-mode nil
+(defvar-local gptel-aibo--from-gptel-mode nil
   "If this from `gptel-mode'.")
 
 (require 'gptel)
 (require 'gptel-context)
-(require 'gptai-context)
-(require 'gptai-action)
+(require 'gptel-aibo-context)
+(require 'gptel-aibo-action)
 
-(defvar gptai-mode-map
+(defvar gptel-aibo-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c RET") #'gptai-send)
-    (define-key map (kbd "C-c !") #'gptai-apply-last-suggestions)
+    (define-key map (kbd "C-c RET") #'gptel-aibo-send)
+    (define-key map (kbd "C-c !") #'gptel-aibo-apply-last-suggestions)
     map)
-  "Keymap for `gptai-mode'.")
+  "Keymap for `gptel-aibo-mode'.")
 
 ;;;###autoload
-(define-minor-mode gptai-mode
+(define-minor-mode gptel-aibo-mode
   "Minor mode for gptel-aibo interacting with LLMs."
   :lighter " GPTel-Aibo"
-  :keymap gptai-mode-map
-  (if gptai-mode
+  :keymap gptel-aibo-mode-map
+  (if gptel-aibo-mode
       (progn
         (if gptel-mode
-            (setq gptai--from-gptel-mode gptel-mode)
+            (setq gptel-aibo--from-gptel-mode gptel-mode)
           (gptel-mode 1))
-        (setq gptai--old-directives gptel-directives)
-        (setq-local gptel-directives (cons `(Aibo . ,gptai--system-message)
+        (setq gptel-aibo--old-directives gptel-directives)
+        (setq-local gptel-directives (cons `(Aibo . ,gptel-aibo--system-message)
                                            gptel-directives))
-        (setq gptai--old-system-message gptel--system-message)
-        (setq-local gptel--system-message gptai--system-message)
-        (setq gptai--old-use-context gptel-use-context)
+        (setq gptel-aibo--old-system-message gptel--system-message)
+        (setq-local gptel--system-message gptel-aibo--system-message)
+        (setq gptel-aibo--old-use-context gptel-use-context)
         (setq-local gptel-use-context 'user)
-        (setq gptai--old-context-wrap-function gptel-context-wrap-function)
-        (setq-local gptel-context-wrap-function #'gptai-context-wrap)
+        (setq gptel-aibo--old-context-wrap-function gptel-context-wrap-function)
+        (setq-local gptel-context-wrap-function #'gptel-aibo-context-wrap)
 
-        (setq gptai--ui-buffer (current-buffer))
-        (setq gptai--working-buffer (other-buffer gptai--ui-buffer t))
+        (setq gptel-aibo--ui-buffer (current-buffer))
+        (setq gptel-aibo--working-buffer (other-buffer gptel-aibo--ui-buffer t))
         ;; (setq header-line-format
         ;;       (list '(:eval (concat "<"
-        ;;                             (buffer-name gptai--working-buffer)
+        ;;                             (buffer-name gptel-aibo--working-buffer)
         ;;                             ">"))))
-        (add-hook 'buffer-list-update-hook #'gptai-mode--check-buffer-list nil t)
-        (message "gptai-mode enabled"))
-    (remove-hook 'buffer-list-update-hook #'gptai-mode--check-buffer-list)
-    (setq-local gptel-directives gptai--old-directives)
-    (setq-local gptel--system-message gptai--old-system-message)
-    (setq-local gptel-use-context gptai--old-use-context)
-    (setq-local gptel-context-wrap-function gptai--old-context-wrap-function)
-    (unless gptai--from-gptel-mode
+        (add-hook 'buffer-list-update-hook #'gptel-aibo--check-buffer-list nil t)
+        (message "gptel-aibo-mode enabled"))
+    (remove-hook 'buffer-list-update-hook #'gptel-aibo--check-buffer-list)
+    (setq-local gptel-directives gptel-aibo--old-directives)
+    (setq-local gptel--system-message gptel-aibo--old-system-message)
+    (setq-local gptel-use-context gptel-aibo--old-use-context)
+    (setq-local gptel-context-wrap-function gptel-aibo--old-context-wrap-function)
+    (unless gptel-aibo--from-gptel-mode
       (gptel-mode -1))
-    (message "gptai-mode disabled")))
+    (message "gptel-aibo-mode disabled")))
 
-(defun gptai-mode--check-buffer-list ()
-  "Check and update the working buffer for gptai mode."
-  (when (eq gptai--ui-buffer (car (buffer-list)))
-    (setq gptai--working-buffer (other-buffer gptai--ui-buffer t))))
+(defun gptel-aibo--check-buffer-list ()
+  "Check and update the working buffer for gptel-aibo mode."
+  (when (eq gptel-aibo--ui-buffer (car (buffer-list)))
+    (setq gptel-aibo--working-buffer (other-buffer gptel-aibo--ui-buffer t))))
 
 ;;;###autoload
-(defun gptai (name)
-  "Create or switch to an gptai buffer with NAME."
+(defun gptel-aibo (name)
+  "Create or switch to an gptel-aibo buffer with NAME."
   (interactive
    (let* ((backend (default-value 'gptel-backend))
           (backend-name
-           (format "*gptai-%s*" (gptel-backend-name backend))))
+           (format "*gptel-aibo-%s*" (gptel-backend-name backend))))
      (list (read-buffer
             "Create or choose gptel-aibo buffer: "
             backend-name
             nil
             (lambda (b)
               (and-let* ((buf (get-buffer (or (car-safe b) b))))
-                (buffer-local-value 'gptai-mode buf)))))))
+                (buffer-local-value 'gptel-aibo-mode buf)))))))
   (with-current-buffer (get-buffer-create name)
     (cond ;Set major mode
      ((eq major-mode gptel-default-mode))
@@ -282,9 +250,9 @@ If a buffer's content exceeds this size, only its outline will be sent"
                   ((eq (car pair) 'text-mode) (cons 'text-mode "\\> "))
                   (t pair)))
                gptel-prompt-prefix-alist)))
-    (unless gptai-mode (gptai-mode 1))
-    (unless (local-variable-p 'gptai--console)
-      (setq-local gptai--console t)
+    (unless gptel-aibo-mode (gptel-aibo-mode 1))
+    (unless (local-variable-p 'gptel-aibo--console)
+      (setq-local gptel-aibo--console t)
       (if (bobp) (insert (gptel-prompt-prefix-string)))
       (when (and (bound-and-true-p evil-local-mode)
                  (fboundp 'evil-insert-state))
@@ -292,37 +260,37 @@ If a buffer's content exceeds this size, only its outline will be sent"
     (when (called-interactively-p 'any)
       (display-buffer (current-buffer) gptel-display-buffer-action))))
 
-(defvar gptai-send--handlers
+(defvar gptel-aibo-send--handlers
   `((WAIT ,#'gptel--handle-wait)
     (TYPE ,#'gptel--handle-pre-insert)
     (ERRS ,#'gptel--handle-error ,#'gptel--fsm-last)
     (TOOL ,#'gptel--handle-tool-use)
-    (DONE ,#'gptai--handle-post-insert
+    (DONE ,#'gptel-aibo--handle-post-insert
           ,#'gptel--handle-post-insert
           ,#'gptel--fsm-last))
-  "Alist specifying handlers for `gptai-send' state transitions.
+  "Alist specifying handlers for `gptel-aibo-send' state transitions.
 
 See `gptel-request--handlers' for details.")
 
 ;;;###autoload
-(defun gptai-send ()
+(defun gptel-aibo-send ()
   "Send the current context and request to GPT for processing."
   (interactive)
 
-  (when (or (not gptai--working-buffer)
-            (not (buffer-live-p gptai--working-buffer)))
-    (setq gptai--working-buffer (other-buffer gptai--ui-buffer t)))
+  (when (or (not gptel-aibo--working-buffer)
+            (not (buffer-live-p gptel-aibo--working-buffer)))
+    (setq gptel-aibo--working-buffer (other-buffer gptel-aibo--ui-buffer t)))
 
   ;; HACK: gptel requires a non-empty context alist for context wrapping.
   (unless gptel-context--alist
-    (setq gptel-context--alist (list (cons gptai--working-buffer nil))))
+    (setq gptel-context--alist (list (cons gptel-aibo--working-buffer nil))))
 
   (gptel-request nil
     :stream gptel-stream
-    :context `(:working-buffer ,gptai--working-buffer)
-    :fsm (gptel-make-fsm :handlers gptai-send--handlers)))
+    :context `(:working-buffer ,gptel-aibo--working-buffer)
+    :fsm (gptel-make-fsm :handlers gptel-aibo-send--handlers)))
 
-(defun gptai--handle-post-insert (fsm)
+(defun gptel-aibo--handle-post-insert (fsm)
   "Handle post-insert operations for FSM.
 
 Add text property ''gptai to the response."
@@ -339,7 +307,7 @@ Add text property ''gptai to the response."
         (add-text-properties start-marker tracking-marker
                              `(gptai ,working-buffer))))))
 
-(defun gptai--insert-response (response info)
+(defun gptel-aibo--insert-response (response info)
   "Insert the LLM RESPONSE into the gptel buffer.
 
 INFO is a plist containing information relevant to this buffer.
@@ -372,13 +340,14 @@ See `gptel--url-get-response' for details."
                 (insert (gptel-response-prefix-string)))
               (move-marker start-marker (point)))
             (insert response)
-            (plist-put info :tracking-marker (setq tracking-marker (point-marker)))
+            (plist-put info :tracking-marker
+                       (setq tracking-marker (point-marker)))
             ;; for uniformity with streaming responses
             (set-marker-insertion-type tracking-marker t)))))
      ((consp response)                  ;tool call or tool result?
       (gptel--display-tool-calls response info)))))
 
-(defun gptai--stream-insert-response (response info)
+(defun gptel-aibo--stream-insert-response (response info)
   "Insert streaming RESPONSE from an LLM into the gptel buffer.
 
 INFO is a mutable plist containing information relevant to this buffer.
@@ -420,22 +389,22 @@ See `gptel--url-get-response' for details."
       (gptel--display-tool-calls response info)))))
 
 ;;;###autoload
-(defun gptai-complete-at-point ()
+(defun gptel-aibo-complete-at-point ()
   "Complete text at point using LLM suggestions.
 
 The response is inserted as an overlay with these keybindings:
 - TAB or RET: Accept and move to the end of the overlay.
 - Any other key: Reject and execute its normal action."
   (interactive)
-  (let ((gptel--system-message gptai--system-role)
-        (prompt (concat (gptai-context-info) gptai--complete-message)))
+  (let ((gptel--system-message gptel-aibo--system-role)
+        (prompt (concat (gptel-aibo-context-info) gptel-aibo--complete-message)))
     (message "Requesting LLM suggestions...")
     ;; (message prompt)
     (gptel-request prompt
       :position (point)
-      :callback #'gptai--insert-completion)))
+      :callback #'gptel-aibo--insert-completion)))
 
-(defun gptai--insert-completion (response info)
+(defun gptel-aibo--insert-completion (response info)
   "Insert the LLM RESPONSE into the calling buffer.
 
 INFO is a plist containing information relevant to this buffer.
@@ -486,17 +455,17 @@ See `gptel--url-get-response' for details."
    (t
     (message "The LLM did not respond as requested."))))
 
-(defvar gptai-complete-mode-map
+(defvar gptel-aibo-complete-mode-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-i i") 'gptai-complete-at-point)
+    (define-key map (kbd "C-c C-i i") 'gptel-aibo-complete-at-point)
     map)
-  "Keymap used for `gptai-complete-mode`.")
+  "Keymap used for `gptel-aibo-complete-mode`.")
 
 ;;;###autoload
-(define-minor-mode gptai-complete-mode
-  "Minor mode gptai llm completions."
+(define-minor-mode gptel-aibo-complete-mode
+  "Minor mode gptel-aibo llm completions."
   :lighter " GPTel-Aibo-Complete"
-  :keymap gptai-complete-mode-map)
+  :keymap gptel-aibo-complete-mode-map)
 
 (provide 'gptel-aibo)
 ;;; gptel-aibo.el ends here

@@ -1,4 +1,4 @@
-;;; gptai-context.el --- Context for gptel-aibo -*- lexical-binding: t; -*-
+;;; gptel-aibo-context.el --- Context for gptel-aibo -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025 Sun Yi Ming
 
@@ -31,7 +31,31 @@
 (require 'gptel-context)
 (require 'imenu)
 
-(defun gptai-context-wrap (message contexts)
+(defcustom gptel-aibo-max-buffer-size 16000
+  "The maximum size of working buffer's content to include in the context.
+
+If the working buffer's content exceeds this size, only the context fragment
+will be sent"
+  :type 'natnum
+  :group 'gptel-aibo
+  :safe #'natnump)
+
+(defcustom gptel-aibo-max-buffer-count 2
+  "The maximum number of buffers to include in the project context."
+  :type 'natnum
+  :group 'gptel-aibo
+  :safe #'natnump)
+
+(defcustom gptel-aibo-max-fragment-size 1024
+  "Maximum size (in characters) for context fragments around cursor position."
+  :type 'natnum
+  :group 'gptel-aibo
+  :safe #'natnump)
+
+(defvar-local gptel-aibo--working-buffer nil
+  "Current working buffer of gptel-aibo.")
+
+(defun gptel-aibo-context-wrap (message contexts)
   "Wrap MESSAGE with CONTEXTS for gptel."
   (let ((context-string
          (concat "---
@@ -43,7 +67,7 @@ Previous suggested actions may be not executed, and the user may have made
 arbitrary modifications outside this conversation.
 
 "
-                 (gptai-context-info gptai--working-buffer)
+                 (gptel-aibo-context-info gptel-aibo--working-buffer)
                  (gptel-context--string contexts))))
     ;; (message "context: %s" context-string)
     (if (> (length context-string) 0)
@@ -53,48 +77,48 @@ arbitrary modifications outside this conversation.
           ('nil    message))
       message)))
 
-(defun gptai-context-info (&optional buffer)
+(defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."
-  (concat (gptai-context--working-buffer-info buffer)
+  (concat (gptel-aibo--working-buffer-info buffer)
           "\n\n"
-          (gptai-context--project-buffers-info buffer)))
+          (gptel-aibo--project-buffers-info buffer)))
 
-(defun gptai-context--working-buffer-info (&optional buffer)
+(defun gptel-aibo--working-buffer-info (&optional buffer)
   "Get context information about BUFFER."
   (with-current-buffer (or buffer (current-buffer))
     (let* ((point (point))
            (widen-point-max (save-restriction (widen) (point-max)))
            (active-buffer-size (- (point-max) (point-min)))
            (context-fragment-boundaries
-            (gptai-context--fragment-boundaries
-             (if (<= active-buffer-size gptai--max-buffer-size)
-                 gptai--max-context-fragment-size
-               gptai--max-buffer-size)))
+            (gptel-aibo--fragment-boundaries
+             (if (<= active-buffer-size gptel-aibo-max-buffer-size)
+                 gptel-aibo-max-fragment-size
+               gptel-aibo-max-buffer-size)))
            (before-start (car context-fragment-boundaries))
            (after-end (cdr context-fragment-boundaries)))
       (concat
        (format "Current working buffer: `%s`\n\n" (buffer-name))
-       (if (<= active-buffer-size gptai--max-buffer-size)
-           (gptai-context--buffer-info)
-         (gptai-context--buffer-filename-info))
+       (if (<= active-buffer-size gptel-aibo-max-buffer-size)
+           (gptel-aibo--buffer-info)
+         (gptel-aibo--buffer-filename-info))
        "\n"
-       "Fragment before the cursor:  \n"
+       "Fragment before the cursor:\n"
        (if (= point 1)
-           "(cursor is at the beginning of the buffer)  "
+           "(cursor is at the beginning of the buffer)"
          (concat (unless (= before-start 1) "...\n")
-                 (gptai-context--make-fenced-code-block
+                 (gptel-aibo--make-code-block
                   (buffer-substring-no-properties before-start point))))
        "\n\n"
-       "Fragment after the cursor:  \n"
+       "Fragment after the cursor:\n"
        (if (= point widen-point-max)
-           "(cursor is at the end of the buffer)  "
+           "(cursor is at the end of the buffer)"
          (concat
-          (gptai-context--make-fenced-code-block
+          (gptel-aibo--make-code-block
            (buffer-substring-no-properties point after-end))
           (unless (= after-end widen-point-max)
             "\n...")))))))
 
-(defun gptai-context--buffer-info (&optional buffer)
+(defun gptel-aibo--buffer-info (&optional buffer)
   "Get buffer information including file path and content.
 
 When BUFFER is nil, use current buffer."
@@ -102,32 +126,28 @@ When BUFFER is nil, use current buffer."
     (let ((buffer-content
            (buffer-substring-no-properties (point-min) (point-max)))
           (language-identifier
-           (gptai-context--mode-to-language-identifier major-mode)))
-      (concat (gptai-context--buffer-filename-info)
-              "Content:  \n"
+           (gptel-aibo--mode-to-language-identifier major-mode)))
+      (concat (gptel-aibo--buffer-filename-info)
+              "Content:\n"
               (if buffer-content
-                  (gptai-context--make-fenced-code-block
+                  (gptel-aibo--make-code-block
                    buffer-content
                    language-identifier)
                 "(empty)")
               "\n"))))
 
-(defun gptai-context--buffer-filename-info (&optional buffer)
-"Return the file path info associated with BUFFER.
+(defun gptel-aibo--buffer-filename-info (&optional buffer)
+  "Return the file path info associated with BUFFER.
 
 BUFFER is the buffer to check, or the current buffer if nil."
-  (format "Filepath: %s  \n"
+  (format "Filepath: %s\n"
           (if-let ((file-name (buffer-file-name buffer)))
               (concat "`" file-name "`")
             "(not associated with a file)")))
 
-(defun gptai-context--buffer-empty-p (&optional buffer)
-  "Check if BUFFER is empty."
-  (with-current-buffer (or buffer (current-buffer))
-    (= (point-min) (point-max))))
-
-(defun gptai-context--buffer-supports-imenu-p (&optional buffer)
+(defun gptel-aibo--buffer-supports-imenu-p (&optional buffer)
   "Return non-nil if BUFFER supports imenu indexing.
+
 If BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
     (or (not (eq imenu-create-index-function
@@ -136,49 +156,50 @@ If BUFFER is nil, use current buffer."
                  imenu-extract-index-name-function)
             (and imenu-generic-expression)))))
 
-(defun gptai-context--buffer-outline-info (&optional buffer)
+(defun gptel-aibo--buffer-outline-info (&optional buffer)
   "Get buffer information including file path and outline.
+
 When BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
-    (if-let ((outline (gptai-context--imenu-outline (current-buffer))))
+    (if-let ((outline (gptel-aibo--imenu-outline (current-buffer))))
         (concat (format "Filepath: `%s`\n" buffer-file-name)
                 "Outline:\n"
                 outline))))
 
-(defun gptai-context--imenu-outline (&optional buffer)
+(defun gptel-aibo--imenu-outline (&optional buffer)
   "Generate hierarchical outline from imenu index of BUFFER.
 Return empty string if BUFFER is nil or imenu index unavailable."
   (with-current-buffer (or buffer (current-buffer))
     (when-let
         ((index (let ((imenu-auto-rescan t))
                   (ignore-errors (imenu--make-index-alist)))))
-      (gptai-context--imenu-index-to-string index 0))))
+      (gptel-aibo--imenu-index-to-string index 0))))
 
-(defun gptai-context--imenu-index-to-string (index depth)
+(defun gptel-aibo--imenu-index-to-string (index depth)
   "Convert an imenu INDEX alist to a hierarchical string.
 DEPTH is the current depth for indentation."
   (mapconcat
    (lambda (item)
      (cond
       ((and (listp item) (listp (car item)))
-       (gptai-context--imenu-index-to-string item depth))
+       (gptel-aibo--imenu-index-to-string item depth))
       ((listp (cdr item))
        (let ((heading (car item))
              (subitems (cdr item)))
          (unless (string= heading ".")
            (concat
             (make-string (* 2 depth) ?\s)
-            (format "- %s\n" (gptai-context--imenu-item-title heading))
-            (gptai-context--imenu-index-to-string subitems (1+ depth))))))
+            (format "- %s\n" (gptel-aibo--imenu-item-title heading))
+            (gptel-aibo--imenu-index-to-string subitems (1+ depth))))))
       ((and (consp item) (not (string= (car item) ".")))
        (concat
         (make-string (* 2 depth) ?\s)
         (format "- %s\n"
-                (gptai-context--imenu-item-title (car item)))))
+                (gptel-aibo--imenu-item-title (car item)))))
       (t "")))
    index ""))
 
-(defun gptai-context--imenu-item-title (item)
+(defun gptel-aibo--imenu-item-title (item)
   "Extract the string title from ITEM, stripping text properties if present."
   (cond
    ((stringp item) (substring-no-properties item))
@@ -186,25 +207,25 @@ DEPTH is the current depth for indentation."
     (substring-no-properties item))
    (t (format "%s" item))))
 
-(cl-defun gptai-context--project-buffers-info (&optional buffer quota)
+(cl-defun gptel-aibo--project-buffers-info (&optional buffer quota)
   "Get information about other buffers in the same project of BUFFER.
 
 The total size of the returned information will be limited by QUOTA."
-  (let* ((buffers (gptai-context--project-buffers buffer))
+  (let* ((buffers (gptel-aibo--project-buffers buffer))
          (buffer-infos nil)
          (current-size 0)
          (buffer-count 0))
 
     (cl-loop
      for buf in buffers
-     until (>= buffer-count gptai--max-project-buffer-count)
+     until (>= buffer-count gptel-aibo-max-buffer-count)
      do
      (when-let*
          ((buffer-size (buffer-size buf))
           (buffer-info
-           (if (<= buffer-size gptai--max-project-buffer-size)
-               (gptai-context--buffer-info buf)
-             (gptai-context--buffer-outline-info buf)))
+           (if (<= buffer-size gptel-aibo-max-buffer-size)
+               (gptel-aibo--buffer-info buf)
+             (gptel-aibo--buffer-outline-info buf)))
           (buffer-info-size (length buffer-info)))
        (when (or (not quota) (<= (+ current-size buffer-info-size) quota))
          (push (cons buf buffer-info) buffer-infos)
@@ -220,7 +241,7 @@ The total size of the returned information will be limited by QUOTA."
                           (nreverse buffer-infos) "\n")
                "\n\n")))))
 
-(defun gptai-context--project-buffers (&optional buffer)
+(defun gptel-aibo--project-buffers (&optional buffer)
   "Get buffers in the same project as BUFFER, itself excluded."
   (let ((current-buffer (or buffer (current-buffer))))
     (when-let ((project-current (with-current-buffer current-buffer
@@ -233,18 +254,18 @@ The total size of the returned information will be limited by QUOTA."
                 (equal (project-current) project-current))))
        (buffer-list)))))
 
-(defun gptai-context--fragment (max-context-length)
+(defun gptel-aibo--fragment (max-context-length)
   "Extract the text fragment around the point.
 
 The total length is limited by MAX-CONTEXT-LENGTH"
-  (let* ((boundaries (gptai-context--fragment-boundaries max-context-length))
+  (let* ((boundaries (gptel-aibo--fragment-boundaries max-context-length))
          (start (car boundaries))
          (end (cdr boundaries))
          (before-text (buffer-substring-no-properties start (point)))
          (after-text (buffer-substring-no-properties (point) end)))
     (cons before-text after-text)))
 
-(defun gptai-context--fragment-boundaries
+(defun gptel-aibo--fragment-boundaries
     (max-context-length &optional buffer pos)
   "Compute context boundaries around POS within MAX-CONTEXT-LENGTH chars.
 
@@ -256,7 +277,7 @@ POS is the position to center on, or the current point if nil."
             (save-excursion
               (while (progn
                        (beginning-of-defun)
-                       (not (gptai-context--unique-region-p (point) pos))))
+                       (not (gptel-aibo--unique-region-p (point) pos))))
               (point)))
            (after-end (save-excursion
                         (end-of-defun)
@@ -285,7 +306,7 @@ POS is the position to center on, or the current point if nil."
             (cons (- pos half-limit)
                   (+ pos half-limit)))))))))
 
-(defun gptai-context--unique-region-p (beg end)
+(defun gptel-aibo--unique-region-p (beg end)
   "Check if the text between BEG and END appears uniquely in the buffer.
 
 BEG is the starting position of the region.
@@ -296,7 +317,7 @@ END is the ending position of the region."
       (when (search-forward region-text nil t)
         (eq (match-beginning 0) beg)))))
 
-(defun gptai-context--fragment-before-cursor ()
+(defun gptel-aibo--fragment-before-cursor ()
   "Get a meaningful fragment of text before the cursor.
 
 The function collects text starting from the cursor position and continues
@@ -318,7 +339,7 @@ Returns a string containing the collected text fragment."
         (setq non-blank-line-count (1+ non-blank-line-count))))
     (save-excursion
       (while (not stop)
-        (if (= (point) (point-min))
+        (if (bobp)
             (setq stop t)
           (progn
             (forward-line -1)
@@ -338,7 +359,7 @@ Returns a string containing the collected text fragment."
                     (setq stop t))))))))
     prefix))
 
-(defun gptai-context--fragment-after-cursor ()
+(defun gptel-aibo--fragment-after-cursor ()
   "Get a meaningful fragment of text after the cursor.
 
 The function collects text starting from the cursor position and continues
@@ -360,7 +381,7 @@ Returns a string containing the collected text fragment."
         (setq non-blank-line-count (1+ non-blank-line-count))))
     (save-excursion
       (while (not stop)
-        (if (= (point) (point-max))
+        (if (eobp)
             (setq stop t)
           (progn
             (forward-line 1)
@@ -382,7 +403,7 @@ Returns a string containing the collected text fragment."
                     (setq stop t))))))))
     suffix))
 
-(defun gptai-context--project-current-directory-info ()
+(defun gptel-aibo--project-current-directory-info ()
   "Return current directory listing as a string if in a project.
 If not in a project, return empty string.
 The listing includes files and directories, with '/' appended to directory
@@ -402,7 +423,7 @@ names."
           (buffer-string)))
     ""))
 
-(defun gptai-context--project-root (project)
+(defun gptel-aibo--project-root (project)
   "Get the root directory of PROJECT.
 Returns: The project root directory as a string, or nil if not found."
   (cond
@@ -411,25 +432,25 @@ Returns: The project root directory as a string, or nil if not found."
    ((fboundp 'project-roots)
     (car (project-roots project)))))
 
-(defun gptai-context--project-directory-info ()
+(defun gptel-aibo--project-directory-info ()
   "Return project directory information based on current location."
   (if (project-current)
-      (let ((top-info (gptai-context--project-top-directory-info))
-            (current-info (gptai-context--project-current-directory-info)))
+      (let ((top-info (gptel-aibo--project-top-directory-info))
+            (current-info (gptel-aibo--project-current-directory-info)))
         (if (string-empty-p top-info)
             ""
           (if (string= (file-name-directory
                         (or buffer-file-name default-directory))
-                       (gptai-context--project-root (project-current)))
+                       (gptel-aibo--project-root (project-current)))
               top-info
             (concat top-info "\n" current-info))))
     ""))
 
-(defun gptai-context--project-top-directory-info ()
+(defun gptel-aibo--project-top-directory-info ()
   "Return formatted string of top-level directory listing.
 If in a project, returns the listing, else returns empty string."
   (if-let ((proj (project-current)))
-      (let ((project-root (gptai-context--project-root proj)))
+      (let ((project-root (gptel-aibo--project-root proj)))
         (with-temp-buffer
           (insert "Files in the project's top directory:\n```\n")
           (dolist (file (directory-files project-root))
@@ -442,12 +463,12 @@ If in a project, returns the listing, else returns empty string."
           (buffer-string)))
     ""))
 
-(defun gptai-context--make-fenced-code-block (content &optional language)
+(defun gptel-aibo--make-code-block (content &optional language)
   "Wrap CONTENT in a fenced code block with optional LANGUAGE identifier."
-  (let ((fence (gptai-context--make-code-fence content)))
+  (let ((fence (gptel-aibo--make-code-fence content)))
     (concat fence (or language "") "\n" content "\n" fence)))
 
-(defun gptai-context--make-code-fence (content)
+(defun gptel-aibo--make-code-fence (content)
   "Generate a code fence string that safely encapsulates CONTENT.
 The fence length is determined by:
 1. The longest sequence of consecutive backticks in CONTENT
@@ -464,7 +485,7 @@ Returns: String containing the appropriate number of backticks"
       (setq start (match-end 0)))
     (make-string (max 3 (1+ max-backticks)) ?`)))
 
-(defun gptai-context--mode-to-language-identifier (mode)
+(defun gptel-aibo--mode-to-language-identifier (mode)
   "Convert MODE to code block language identifier."
   (let* ((mode-name (symbol-name mode))
          (mode-mapping
@@ -497,7 +518,7 @@ Returns: String containing the appropriate number of backticks"
     (or lang
         (replace-regexp-in-string "-mode$" "" mode-name))))
 
-(defun gptai-context--indent (content depth)
+(defun gptel-aibo--indent (content depth)
   "Indent CONTENT by DEPTH spaces at the start of each line.
 Returns the indented content as a string."
   (let ((lines (split-string content "\n")))
@@ -506,5 +527,5 @@ Returns the indented content as a string."
                lines
                "\n")))
 
-(provide 'gptai-context)
-;;; gptai-context.el ends here
+(provide 'gptel-aibo-context)
+;;; gptel-aibo-context.el ends here

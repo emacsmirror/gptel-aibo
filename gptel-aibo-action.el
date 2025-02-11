@@ -1,4 +1,4 @@
-;;; gptai-action.el --- Action for gptel-aibo -*- lexical-binding: t; -*-
+;;; gptel-aibo-action.el --- Action for gptel-aibo -*- lexical-binding: t; -*-
 ;;
 ;; Copyright (C) 2025 Sun Yi Ming
 ;;
@@ -26,18 +26,18 @@
 
 ;;; Code:
 
-(require 'gptai-context)
+(require 'gptel-aibo-context)
 (require 'text-property-search)
 (require 'cl-lib)
 
-(defun gptai-apply-last-suggestions ()
+(defun gptel-aibo-apply-last-suggestions ()
   "Parse and apply the last LLM response in current buffer.
 
 This function searches backward from the end of buffer for the last
 GPT response (marked with ''gptel ''response text property), extracts
 its content, and applies any valid operations found in the response.
 
-See `gptai--apply-suggestions' for implementation details."
+See `gptel-aibo--apply-suggestions' for implementation details."
   (interactive)
   (save-excursion
     (goto-char (point-max))
@@ -55,14 +55,14 @@ See `gptai--apply-suggestions' for implementation details."
                    (response (buffer-substring-no-properties begin end)))
               (with-current-buffer working-buffer
                 (and
-                 (eq (gptai--apply-suggestions response 'dry-run) t)
-                 (gptai--apply-suggestions response)))))))
+                 (eq (gptel-aibo--apply-suggestions response 'dry-run) t)
+                 (gptel-aibo--apply-suggestions response)))))))
       (message "No response found."))))
 
-(defvar gptai--delete-confirmation nil
+(defvar gptel-aibo--delete-confirmation nil
   "Stores user confirmation preference for file deletion.")
 
-(defun gptai--apply-suggestions (response &optional dry-run)
+(defun gptel-aibo--apply-suggestions (response &optional dry-run)
   "Parse the RESPONSE for OP commands and apply the actions.
 
 If DRY-RUN is non-nil, simulate operations without making any actual changes.
@@ -71,8 +71,8 @@ Returns:
 - t if all operations were applied successfully
 - nil if an error occurred during parsing or execution
 - :no-op if no operations were found"
-  (setq gptai--delete-confirmation nil)
-  (let ((parse-result (gptai--parse-suggestions response)))
+  (setq gptel-aibo--delete-confirmation nil)
+  (let ((parse-result (gptel-aibo--parse-suggestions response)))
     (cond
      ((eq (car parse-result) 'error)
       (message "Error parsing suggestions: %s" (cadr parse-result))
@@ -87,7 +87,7 @@ Returns:
             always
             (condition-case err
                 (progn
-                  (gptai-execute op dry-run)
+                  (gptel-aibo-execute op dry-run)
                   t)
               (error
                (message "Error applying OP: %s" (error-message-string err))
@@ -96,7 +96,7 @@ Returns:
                     (if dry-run "[dry-run]" ""))
            t)))))
 
-(defun gptai--parse-suggestions (response)
+(defun gptel-aibo--parse-suggestions (response)
   "Parse RESPONSE string into a list of operations.
 Returns ops list on success, or (error . message) on failure."
   (let ((lines (split-string response "\n"))
@@ -108,12 +108,12 @@ Returns ops list on success, or (error . message) on failure."
          ((string-match "^\\*\\*OP\\*\\*\\s-+\\(\\w+\\)\\(.*\\)$" line)
           ;; Process matched OP line
           (let* ((op (match-string 1 line))
-                 (target (gptai--markdown-unbacktick
+                 (target (gptel-aibo--markdown-unbacktick
                           (string-trim (match-string 2 line))))
                  (next-lines (cdr lines))
                  (op-parse-result
-                  (if-let ((op-parser (gptai--create-op-parser op)))
-                      (gptai-parse-op op-parser target next-lines)
+                  (if-let ((op-parser (gptel-aibo--create-op-parser op)))
+                      (gptel-aibo-parse-op op-parser target next-lines)
                     (list 'error
                           (format "Unknown operation type: %s" op)
                           lines))))
@@ -126,36 +126,36 @@ Returns ops list on success, or (error . message) on failure."
           (setq lines (cdr lines))))))
     (or parse-error (nreverse ops))))
 
-(defun gptai--markdown-unbacktick (str)
+(defun gptel-aibo--markdown-unbacktick (str)
   "Remove markdown code block backticks from STR."
   (if (and (string-match "^\\(`+\\)\\(.*\\)\\1$" str)
            (> (length (match-string 1 str)) 0))
       (match-string 2 str)
     str))
 
-(defun gptai--create-op-parser (op)
+(defun gptel-aibo--create-op-parser (op)
   "Construct the appropriate parser for the given operation type OP.
 
 Returns the corresponding parser, or nil if the operation type is unknown."
   (pcase op
-    ("MODIFY" (gptai-make-modification-op-parser))
-    ("CREATE" (gptai-make-creation-op-parser))
-    ("DELETE" (gptai-make-deletion-op-parser))
+    ("MODIFY" (gptel-aibo-make-mod-op-parser))
+    ("CREATE" (gptel-aibo-make-creation-op-parser))
+    ("DELETE" (gptel-aibo-make-del-op-parser))
     (_ nil)))
 
-(cl-defgeneric gptai-parse-op (parser target lines)
+(cl-defgeneric gptel-aibo-parse-op (parser target lines)
   "Parse the operation using a specific PARSER instance, TARGET, and LINES.")
 
-(cl-defstruct (gptai-op-parser (:constructor gptai-make-op-parser))
-  "Base class for all gptai operation parsers.")
+(cl-defstruct (gptel-aibo-op-parser (:constructor gptel-aibo-make-op-parser))
+  "Base class for all gptel-aibo operation parsers.")
 
-(cl-defstruct (gptai-modification-op-parser
-               (:include gptai-op-parser)
-               (:constructor gptai-make-modification-op-parser))
+(cl-defstruct (gptel-aibo-mod-op-parser
+               (:include gptel-aibo-op-parser)
+               (:constructor gptel-aibo-make-mod-op-parser))
   "Parser for modification operations.")
 
-(cl-defmethod gptai-parse-op
-  ((_parser gptai-modification-op-parser) target lines)
+(cl-defmethod gptel-aibo-parse-op
+  ((_parser gptel-aibo-mod-op-parser) target lines)
   "Parse a modification operation from TARGET and LINES."
   (while (and lines (string-blank-p (car lines)))
     (setq lines (cdr lines)))
@@ -166,50 +166,52 @@ Returns the corresponding parser, or nil if the operation type is unknown."
    ;; While we’ve instructed the LLM to use search/replace pairs, it doesn’t
    ;; always follow faithfully.
    ((string-match "^\\(`\\{3,\\}\\)" (car lines))
-    (let ((result (gptai--parse-code-block lines)))
+    (let ((result (gptel-aibo--parse-code-block lines)))
       (if (eq (car result) 'error)
           result
-        (cons (gptai-make-modification-op
+        (cons (gptel-aibo-make-mod-op
                :target target
                :full-content (car result))
               (cdr result)))))
 
    (t
-    (let ((result (gptai--parse-search-replace-pairs lines)))
+    (let ((result (gptel-aibo--parse-search-replace-pairs lines)))
       (if (eq (car result) 'error)
           result
-        (cons (gptai-make-modification-op
+        (cons (gptel-aibo-make-mod-op
                :target target
                :replacements (car result))
               (cdr result)))))))
 
-(cl-defstruct (gptai-creation-op-parser
-               (:include gptai-op-parser)
-               (:constructor gptai-make-creation-op-parser))
+(cl-defstruct (gptel-aibo-creation-op-parser
+               (:include gptel-aibo-op-parser)
+               (:constructor gptel-aibo-make-creation-op-parser))
   "Parser for creation operations.")
 
-(cl-defmethod gptai-parse-op ((_parser gptai-creation-op-parser) target lines)
+(cl-defmethod gptel-aibo-parse-op
+  ((_parser gptel-aibo-creation-op-parser) target lines)
   "Parse a creation operation from TARGET and LINES."
-  (let ((result (gptai--parse-code-block lines)))
+  (let ((result (gptel-aibo--parse-code-block lines)))
     (if (eq (car result) 'error)
         result
-      (cons (gptai-make-creation-op
+      (cons (gptel-aibo-make-creation-op
              :filename target
              :content (car result))
             (cdr result)))))
 
-(cl-defstruct (gptai-deletion-op-parser
-               (:include gptai-op-parser)
-               (:constructor gptai-make-deletion-op-parser))
+(cl-defstruct (gptel-aibo-del-op-parser
+               (:include gptel-aibo-op-parser)
+               (:constructor gptel-aibo-make-del-op-parser))
   "Parser for deletion operations.")
 
-(cl-defmethod gptai-parse-op ((_parser gptai-deletion-op-parser) target lines)
+(cl-defmethod gptel-aibo-parse-op
+  ((_parser gptel-aibo-del-op-parser) target lines)
   "Parse a deletion operation from TARGET and LINES."
-  (cons (gptai-make-deletion-op
+  (cons (gptel-aibo-make-del-op
          :filename target)
         lines))
 
-(defun gptai--parse-search-replace-pairs (lines)
+(defun gptel-aibo--parse-search-replace-pairs (lines)
   "Parse search/replace pairs from LINES.
 Returns (replacements . remaining-lines) on success,
 or (error . message) on failure."
@@ -228,7 +230,7 @@ or (error . message) on failure."
                     (list 'error  "No valid search/replace pairs found" lines))
             (setq parse-end t)) ;; Exit loop if pairs are not empty
         ;; Found *SEARCH*, parse the search block
-        (let ((search-parse-result (gptai--parse-code-block (cdr lines))))
+        (let ((search-parse-result (gptel-aibo--parse-code-block (cdr lines))))
           (if (eq (car search-parse-result) 'error)
               (setq parse-error search-parse-result)
             (let ((search-content (car search-parse-result))
@@ -244,7 +246,7 @@ or (error . message) on failure."
                         (list 'error "Expected *REPLACE* after search block"
                               remain-lines))
                 (let ((replace-parse-result
-                       (gptai--parse-code-block (cdr remain-lines))))
+                       (gptel-aibo--parse-code-block (cdr remain-lines))))
                   (if (eq (car replace-parse-result) 'error)
                       (setq parse-error replace-parse-result)
                     ;; Add parsed pair
@@ -258,7 +260,7 @@ or (error . message) on failure."
         parse-error
       (cons (nreverse replacements) lines))))
 
-(defun gptai--parse-code-block (lines)
+(defun gptel-aibo--parse-code-block (lines)
   "Parse a fenced code block from LINES.
 Returns (content . remaining-lines) on success,
 or (error . message) on failure."
@@ -286,7 +288,7 @@ or (error . message) on failure."
                 (list 'error "Unclosed code block" lines)
               (cons (string-join (nreverse content) "\n") (cdr lines)))))))))
 
-(defun gptai--is-in-project (working-buffer buffer-or-filename)
+(defun gptel-aibo--is-in-project (working-buffer buffer-or-filename)
   "Return t if BUFFER-OR-FILENAME is in the same project as WORKING-BUFFER.
 
 - If BUFFER-OR-FILENAME is a buffer and equals WORKING-BUFFER, return t.
@@ -301,32 +303,32 @@ or (error . message) on failure."
     (when-let* ((working-dir
                  (buffer-local-value 'default-directory working-buffer))
                 (project (project-current nil working-dir))
-                (project-root (gptai-context--project-root project))
+                (project-root-dir (gptel-aibo--project-root project))
                 (file-path
                  (if (bufferp buffer-or-filename)
                      (buffer-local-value 'default-directory buffer-or-filename)
                    buffer-or-filename)))
-      (file-in-directory-p file-path project-root)))))
+      (file-in-directory-p file-path project-root-dir)))))
 
-(cl-defgeneric gptai-execute (op &optional dry-run)
+(cl-defgeneric gptel-aibo-execute (op &optional dry-run)
   "Execute an operation OP. If DRY-RUN is non-nil, simulate the operation.")
 
-(cl-defstruct (gptai-op (:constructor gptai-make-op))
-  "Base class for all gptai operations.")
+(cl-defstruct (gptel-aibo-op (:constructor gptel-aibo-make-op))
+  "Base class for all gptel-aibo operations.")
 
-(cl-defstruct (gptai-modification-op (:include gptai-op)
-                                     (:constructor gptai-make-modification-op))
+(cl-defstruct (gptel-aibo-mod-op (:include gptel-aibo-op)
+                                 (:constructor gptel-aibo-make-mod-op))
   "Represents a buffer modification operation."
   target
   replacements
   full-content)
 
-(cl-defmethod gptai-execute ((op gptai-modification-op) &optional dry-run)
+(cl-defmethod gptel-aibo-execute ((op gptel-aibo-mod-op) &optional dry-run)
   "Execute a modification operation OP.
 If DRY-RUN is non-nil, simulate the operation without making any changes."
-  (let ((buffer-name (gptai-modification-op-target op))
-        (replacements (gptai-modification-op-replacements op))
-        (full-content (gptai-modification-op-full-content op)))
+  (let ((buffer-name (gptel-aibo-mod-op-target op))
+        (replacements (gptel-aibo-mod-op-replacements op))
+        (full-content (gptel-aibo-mod-op-full-content op)))
     (message "Applying MODIFY%s: %s" (if dry-run "[dry-run]" "") buffer-name)
     ;; We require LLM to use buffer name, but LLM doesn't always follow it.
     (let ((op-buffer (or (get-buffer buffer-name)
@@ -334,7 +336,7 @@ If DRY-RUN is non-nil, simulate the operation without making any changes."
       (cond
        ((not op-buffer)
         (error "Buffer not found: %s" buffer-name))
-       ((not (gptai--is-in-project (current-buffer) op-buffer))
+       ((not (gptel-aibo--is-in-project (current-buffer) op-buffer))
         (error "Modifications outside the working project are not allowed: %s"
                buffer-name))
        (full-content
@@ -357,19 +359,19 @@ If DRY-RUN is non-nil, simulate the operation without making any changes."
           (when (buffer-file-name)
             (save-buffer))))))))
 
-(cl-defstruct (gptai-creation-op (:include gptai-op)
-                                 (:constructor gptai-make-creation-op))
+(cl-defstruct (gptel-aibo-creation-op (:include gptel-aibo-op)
+                                      (:constructor gptel-aibo-make-creation-op))
   "Represents a file creation operation."
   filename
   content)
 
-(cl-defmethod gptai-execute ((op gptai-creation-op) &optional dry-run)
+(cl-defmethod gptel-aibo-execute ((op gptel-aibo-creation-op) &optional dry-run)
   "Execute a creation operation OP.
 If DRY-RUN is non-nil, simulate the operation without creating the file."
-  (let ((filename (gptai-creation-op-filename op))
-        (content (gptai-creation-op-content op)))
+  (let ((filename (gptel-aibo-creation-op-filename op))
+        (content (gptel-aibo-creation-op-content op)))
     (message "Applying CREATE%s: %s" (if dry-run "[dry-run]" "") filename)
-    (unless (gptai--is-in-project (current-buffer) filename)
+    (unless (gptel-aibo--is-in-project (current-buffer) filename)
       (error "Creating file outside the working project is not allowed: %s"
              filename))
     (when (file-exists-p filename)
@@ -380,17 +382,17 @@ If DRY-RUN is non-nil, simulate the operation without creating the file."
         (set-visited-file-name filename)
         (save-buffer)))))
 
-(cl-defstruct (gptai-deletion-op (:include gptai-op)
-                                 (:constructor gptai-make-deletion-op))
+(cl-defstruct (gptel-aibo-del-op (:include gptel-aibo-op)
+                                 (:constructor gptel-aibo-make-del-op))
   "Represents a file deletion operation."
   filename)
 
-(cl-defmethod gptai-execute ((op gptai-deletion-op) &optional dry-run)
+(cl-defmethod gptel-aibo-execute ((op gptel-aibo-del-op) &optional dry-run)
   "Execute a deletion operation OP.
 If DRY-RUN is non-nil, simulate deletion without actually removing the file."
-  (let ((filename (gptai-deletion-op-filename op)))
+  (let ((filename (gptel-aibo-del-op-filename op)))
     (message "Applying DELETE%s: %s" (if dry-run "[dry-run]" "") filename)
-    (unless (gptai--is-in-project (current-buffer) filename)
+    (unless (gptel-aibo--is-in-project (current-buffer) filename)
       (error "Deleting files outside the working project is not allowed: %s"
              filename))
     (unless (file-exists-p filename)
@@ -400,9 +402,9 @@ If DRY-RUN is non-nil, simulate deletion without actually removing the file."
         (kill-buffer file-buffer)))
     (unless dry-run
       (cond
-       ((eq gptai--delete-confirmation 'never)
+       ((eq gptel-aibo--delete-confirmation 'never)
         (message "File deletion refused by user: %s" filename))
-       ((eq gptai--delete-confirmation 'always)
+       ((eq gptel-aibo--delete-confirmation 'always)
         (delete-file filename))
        (t
         (let ((response
@@ -412,10 +414,10 @@ If DRY-RUN is non-nil, simulate deletion without actually removing the file."
           (pcase response
             (?y (delete-file filename))
             (?n (message "File deletion refused by user: %s" filename))
-            (?a (setq gptai--delete-confirmation 'always)
+            (?a (setq gptel-aibo--delete-confirmation 'always)
                 (delete-file filename))
-            (?N (setq gptai--delete-confirmation 'never)
+            (?N (setq gptel-aibo--delete-confirmation 'never)
                 (message "File deletion refused by user: %s" filename)))))))))
 
-(provide 'gptai-action)
-;;; gptai-action.el ends here
+(provide 'gptel-aibo-action)
+;;; gptel-aibo-action.el ends here
