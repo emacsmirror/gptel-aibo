@@ -215,6 +215,28 @@ suitable content can be suggested, return an empty string.")
       (gptel-mode -1))
     (message "gptel-aibo-mode disabled")))
 
+(defun gptel-aibo-context-wrap (message contexts)
+  "Wrap MESSAGE with CONTEXTS for gptel."
+  (let ((context-string
+         (concat "---
+
+Request context:
+
+**Note**: This context reflects the *latest state* of the user's environment.
+Previous suggested actions may be not executed, and the user may have made
+arbitrary modifications outside this conversation.
+
+"
+                 (gptel-aibo-context-info gptel-aibo--working-buffer)
+                 (gptel-context--string contexts))))
+    ;; (message "context: %s" context-string)
+    (if (> (length context-string) 0)
+        (pcase-exhaustive gptel-use-context
+          ('system (concat message "\n\n" context-string))
+          ('user   (concat message "\n\n" context-string))
+          ('nil    message))
+      message)))
+
 (defun gptel-aibo--check-buffer-list ()
   "Check and update the working buffer for gptel-aibo mode."
   (when (eq gptel-aibo--ui-buffer (car (buffer-list)))

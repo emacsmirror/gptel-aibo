@@ -27,8 +27,6 @@
 ;;; Code:
 
 
-(require 'gptel)
-(require 'gptel-context)
 (require 'imenu)
 
 (defcustom gptel-aibo-max-buffer-size 16000
@@ -64,28 +62,6 @@ will be discarded."
 
 (defvar-local gptel-aibo--working-buffer nil
   "Current working buffer of gptel-aibo.")
-
-(defun gptel-aibo-context-wrap (message contexts)
-  "Wrap MESSAGE with CONTEXTS for gptel."
-  (let ((context-string
-         (concat "---
-
-Request context:
-
-**Note**: This context reflects the *latest state* of the user's environment.
-Previous suggested actions may be not executed, and the user may have made
-arbitrary modifications outside this conversation.
-
-"
-                 (gptel-aibo-context-info gptel-aibo--working-buffer)
-                 (gptel-context--string contexts))))
-    ;; (message "context: %s" context-string)
-    (if (> (length context-string) 0)
-        (pcase-exhaustive gptel-use-context
-          ('system (concat message "\n\n" context-string))
-          ('user   (concat message "\n\n" context-string))
-          ('nil    message))
-      message)))
 
 (defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."
