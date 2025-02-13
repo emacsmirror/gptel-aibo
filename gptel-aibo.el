@@ -222,9 +222,10 @@ suitable content can be suggested, return an empty string.")
 
 Request context:
 
-**Note**: This context reflects the *latest state* of the user's environment.
-Previous suggested actions may be not executed, and the user may have made
-arbitrary modifications outside this conversation.
+**Note**: This context reflects the user's **most recent** working state. If
+there is a conflict with inferred content, the context takes precedence, as
+previous suggested actions may not have been executed and the user may have made
+changes outside this conversation.
 
 "
                  (gptel-aibo-context-info gptel-aibo--working-buffer)
