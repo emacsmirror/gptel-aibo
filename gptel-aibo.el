@@ -152,9 +152,6 @@ the surrounding text.
 4. Do not call tools or ask questions to obtain additional information. If no
 suitable content can be suggested, return an empty string.")
 
-(defvar-local gptel-aibo--ui-buffer nil
-  "Current ui buffer of gptel-aibo.")
-
 (defvar-local gptel-aibo--old-directives nil)
 
 (defvar-local gptel-aibo--old-system-message nil)
@@ -197,16 +194,19 @@ suitable content can be suggested, return an empty string.")
         (setq-local gptel-use-context 'user)
         (setq gptel-aibo--old-context-wrap-function gptel-context-wrap-function)
         (setq-local gptel-context-wrap-function #'gptel-aibo-context-wrap)
-
-        (setq gptel-aibo--ui-buffer (current-buffer))
-        (setq gptel-aibo--working-buffer (other-buffer gptel-aibo--ui-buffer t))
-        ;; (setq header-line-format
-        ;;       (list '(:eval (concat "<"
-        ;;                             (buffer-name gptel-aibo--working-buffer)
-        ;;                             ">"))))
-        (add-hook 'buffer-list-update-hook #'gptel-aibo--check-buffer-list nil t)
+        (when gptel-use-header-line
+          (setq header-line-format
+                (cons '(:eval (concat
+                               (propertize " " 'display '(space :align-to 0))
+                               "<"
+                               (buffer-name gptel-aibo--working-buffer)
+                               ">"))
+                      (cdr header-line-format))))
+        (add-hook 'window-selection-change-functions
+                  #'gptel-aibo--window-selection-change nil t)
         (message "gptel-aibo-mode enabled"))
-    (remove-hook 'buffer-list-update-hook #'gptel-aibo--check-buffer-list)
+    (remove-hook 'window-selection-change-functions
+                 #'gptel-aibo--window-selection-change)
     (setq-local gptel-directives gptel-aibo--old-directives)
     (setq-local gptel--system-message gptel-aibo--old-system-message)
     (setq-local gptel-use-context gptel-aibo--old-use-context)
@@ -238,50 +238,117 @@ changes outside this conversation.
           ('nil    message))
       message)))
 
-(defun gptel-aibo--check-buffer-list ()
-  "Check and update the working buffer for gptel-aibo mode."
-  (when (eq gptel-aibo--ui-buffer (car (buffer-list)))
-    (setq gptel-aibo--working-buffer (other-buffer gptel-aibo--ui-buffer t))))
+(defun gptel-aibo--window-selection-change (window)
+  "Handle window selection change to update working buffer and project.
+
+WINDOW is the newly selected window."
+  (when (eq window (selected-window))
+    (if gptel-aibo--trigger-buffer
+        (progn
+          (unless (eq gptel-aibo--working-buffer gptel-aibo--trigger-buffer)
+            (setq gptel-aibo--working-buffer gptel-aibo--trigger-buffer))
+          (setq gptel-aibo--trigger-buffer nil))
+      (let ((working-buffer-cand (window-buffer (old-selected-window))))
+        (unless (eq gptel-aibo--working-buffer working-buffer-cand)
+          (when (or (not gptel-aibo--working-project)
+                    (when-let* ((candidate-project
+                                 (with-current-buffer working-buffer-cand
+                                   (project-current)))
+                                (candidate-project-root
+                                 (gptel-aibo--project-root candidate-project)))
+                      (equal gptel-aibo--working-project candidate-project-root)))
+            (setq gptel-aibo--working-buffer working-buffer-cand)))))))
+
+(defun gptel-aibo--get-console ()
+  "Retrieve a console matching current buffer."
+  (if-let ((project (project-current)))
+      (gptel-aibo--get-project-console project)
+    (get-buffer-create "*gptel-aibo*")))
+
+(defun gptel-aibo--get-project-console (project)
+  "Retrieve a console matching the PROJECT."
+  (let*  ((project-root-dir (gptel-aibo--project-root project))
+          (project-readable-name (gptel-aibo--project-name project))
+          (base-name (format "*gptel-aibo: %s*" project-readable-name)))
+    (if-let* ((buffer-candidate (get-buffer base-name))
+              ((equal (buffer-local-value 'gptel-aibo--working-project
+                                          buffer-candidate)
+                      project-root-dir)))
+        buffer-candidate
+      (gptel-aibo--get-project-match-console base-name project-root-dir))))
+
+(defun gptel-aibo--get-project-match-console (base-name project-root-dir)
+  "Retrieve a buffer matching BASE-NAME and PROJECT-ROOT-DIR."
+  (let ((name-pattern (format "^%s<\\([0-9]+\\)>$" (regexp-quote base-name))))
+    (if-let ((matching-buffer
+              (seq-find
+               (lambda (buffer)
+                 (and (string-match name-pattern (buffer-name buffer))
+                      (equal (buffer-local-value 'gptel-aibo--working-project
+                                                 buffer)
+                             project-root-dir)))
+               (buffer-list))))
+        matching-buffer
+      (generate-new-buffer base-name))))
 
 ;;;###autoload
-(defun gptel-aibo (name)
-  "Create or switch to an gptel-aibo buffer with NAME."
+(defun gptel-aibo (&optional buffer)
+  "Open or initialize a GPTEL-AIBO console buffer.
+
+If called interactively with a prefix argument, prompt for a project-specific
+console buffer or create a new one. Sets up the buffer to use `gptel-aibo-mode`
+and handles project-specific configurations if applicable. Displays the console
+buffer after initialization.
+
+Optional argument BUFFER specifies the name of the buffer to manage."
   (interactive
-   (let* ((backend (default-value 'gptel-backend))
-          (backend-name
-           (format "*gptel-aibo-%s*" (gptel-backend-name backend))))
-     (list (read-buffer
-            "Create or choose gptel-aibo buffer: "
-            backend-name
-            nil
+   (list
+    (and current-prefix-arg
+         (let ((project-root-dir (when-let ((project (project-current)))
+                                   (gptel-aibo--project-root project))))
+           (read-buffer
+            "Create or choose gptel-aibo console: "
+            nil nil
             (lambda (b)
-              (and-let* ((buf (get-buffer (or (car-safe b) b))))
-                (buffer-local-value 'gptel-aibo-mode buf)))))))
-  (with-current-buffer (get-buffer-create name)
-    (cond ;Set major mode
-     ((eq major-mode gptel-default-mode))
-     ((eq gptel-default-mode 'text-mode)
-      (text-mode)
-      (visual-line-mode 1))
-     (t (funcall gptel-default-mode)))
-    (unless (local-variable-p 'gptel-prompt-prefix-alist)
-      (setq-local
-       gptel-prompt-prefix-alist
-       (mapcar (lambda (pair)
-                 (cond
-                  ((eq (car pair) 'markdown-mode) (cons 'markdown-mode "\\> "))
-                  ((eq (car pair) 'text-mode) (cons 'text-mode "\\> "))
-                  (t pair)))
-               gptel-prompt-prefix-alist)))
-    (unless gptel-aibo-mode (gptel-aibo-mode 1))
-    (unless (local-variable-p 'gptel-aibo--console)
-      (setq-local gptel-aibo--console t)
-      (if (bobp) (insert (gptel-prompt-prefix-string)))
-      (when (and (bound-and-true-p evil-local-mode)
-                 (fboundp 'evil-insert-state))
-        (evil-insert-state)))
-    (when (called-interactively-p 'any)
-      (display-buffer (current-buffer) gptel-display-buffer-action))))
+              (and-let*
+                  ((buf (get-buffer (or (car-safe b) b)))
+                   ((buffer-local-value 'gptel-aibo-mode buf))
+                   ((equal
+                     (buffer-local-value 'gptel-aibo--working-project buf)
+                     project-root-dir))))))))))
+  (let ((trigger-buffer (current-buffer))
+        (console-buffer
+         (if buffer (get-buffer-create buffer)
+           (gptel-aibo--get-console))))
+    (with-current-buffer console-buffer
+      (cond ;Set major mode
+       ((eq major-mode gptel-default-mode))
+       ((eq gptel-default-mode 'text-mode)
+        (text-mode)
+        (visual-line-mode 1))
+       (t (funcall gptel-default-mode)))
+      (unless (local-variable-p 'gptel-prompt-prefix-alist)
+        (setq-local
+         gptel-prompt-prefix-alist
+         (mapcar (lambda (pair)
+                   (cond
+                    ((eq (car pair) 'markdown-mode) (cons 'markdown-mode "\\> "))
+                    ((eq (car pair) 'text-mode) (cons 'text-mode "\\> "))
+                    (t pair)))
+                 gptel-prompt-prefix-alist)))
+      (when-let* ((current-project (project-current))
+                  (project-root-dir (gptel-aibo--project-root current-project)))
+        (setq gptel-aibo--working-project project-root-dir))
+      (unless gptel-aibo-mode (gptel-aibo-mode 1))
+      (unless (local-variable-p 'gptel-aibo--console)
+        (setq-local gptel-aibo--console t)
+        (if (bobp) (insert (gptel-prompt-prefix-string)))
+        (when (and (bound-and-true-p evil-local-mode)
+                   (fboundp 'evil-insert-state))
+          (evil-insert-state)))
+      (when (called-interactively-p 'any)
+        (setq gptel-aibo--trigger-buffer trigger-buffer)
+        (display-buffer (current-buffer) gptel-display-buffer-action)))))
 
 (defvar gptel-aibo-send--handlers
   `((WAIT ,#'gptel--handle-wait)
@@ -299,10 +366,6 @@ See `gptel-request--handlers' for details.")
 (defun gptel-aibo-send ()
   "Send the current context and request to GPT for processing."
   (interactive)
-
-  (when (or (not gptel-aibo--working-buffer)
-            (not (buffer-live-p gptel-aibo--working-buffer)))
-    (setq gptel-aibo--working-buffer (other-buffer gptel-aibo--ui-buffer t)))
 
   ;; HACK: gptel requires a non-empty context alist for context wrapping.
   (unless gptel-context--alist

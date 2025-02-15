@@ -60,8 +60,14 @@ will be discarded."
   :group 'gptel-aibo
   :safe #'natnump)
 
+(defvar-local gptel-aibo--working-project nil
+  "Current working project of gptel-aibo.")
+
 (defvar-local gptel-aibo--working-buffer nil
   "Current working buffer of gptel-aibo.")
+
+(defvar-local gptel-aibo--trigger-buffer nil
+  "The buffer in which the gptel-aibo command was triggered.")
 
 (defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."
@@ -448,6 +454,11 @@ Returns: The project root directory as a string, or nil if not found."
     (project-root project))
    ((fboundp 'project-roots)
     (car (project-roots project)))))
+
+(defun gptel-aibo--project-name (project)
+  "Get the name of PROJECT."
+  (file-name-nondirectory (directory-file-name
+                           (gptel-aibo--project-root project))))
 
 (defun gptel-aibo--project-directory-info ()
   "Return project directory information based on current location."
