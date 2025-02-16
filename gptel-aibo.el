@@ -166,7 +166,7 @@ suitable content can be suggested, return an empty string.")
 (require 'gptel)
 (require 'gptel-context)
 (require 'gptel-aibo-context)
-(require 'gptel-aibo-action)
+(require 'gptel-aibo-planner)
 
 (defvar gptel-aibo-mode-map
   (let ((map (make-sparse-keymap)))
@@ -321,15 +321,12 @@ Optional argument BUFFER specifies the name of the buffer to manage."
          (if buffer (get-buffer-create buffer)
            (gptel-aibo--get-console))))
     (with-current-buffer console-buffer
-      (let ((gptel-default-mode (if (fboundp 'markdown-mode)
-                                    'markdown-mode
-                                  'text-mode)))
-        (cond ;Set major mode
-         ((eq major-mode gptel-default-mode))
-         ((eq gptel-default-mode 'text-mode)
-          (text-mode)
-          (visual-line-mode 1))
-         (t (funcall gptel-default-mode))))
+      (cond ;Set major mode
+       ((eq major-mode gptel-default-mode))
+       ((eq gptel-default-mode 'text-mode)
+        (text-mode)
+        (visual-line-mode 1))
+       (t (funcall gptel-default-mode)))
       (unless (local-variable-p 'gptel-prompt-prefix-alist)
         (setq-local
          gptel-prompt-prefix-alist
