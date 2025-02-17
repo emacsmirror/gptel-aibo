@@ -2,7 +2,7 @@
 (require 'gptel-aibo-planner)
 
 (ert-deftest test-gptel-aibo--apply-suggestions ()
-  "Test gptel-aibo--apply-suggestions"
+  "Test gptel-aibo--apply-suggestions."
   (with-temp-directory
    working-dir
    (make-directory (expand-file-name ".git" working-dir))
@@ -53,13 +53,54 @@ lines remain
          (should (gptel-aibo--apply-suggestions input))
          (should (equal (buffer-string) "world"))
          (should (file-exists-p filename1))
-         (find-file filename1)
-         (should (string= (buffer-string) "hello\nworld"))
-         (kill-buffer)
+         (with-temp-buffer
+           (insert-file-contents filename1)
+           (should (string= (buffer-string) "hello\nworld")))
          (should-not (file-exists-p filename2)))))))
 
+(ert-deftest test-gptel-aibo--apply-suggestions-dry-run-fail ()
+  "Test gptel-aibo--apply-suggestions fail in dry-run.
+
+Nothing should be changed."
+   (with-temp-buffer
+     (insert "hello\nworld\n")
+     (let* ((buf-name (buffer-name))
+            (input
+             (format "
+---
+
+**OP** MODIFY `%s`
+*SEARCH*
+```
+hello
+```
+*REPLACE*
+```
+hi
+```
+
+---
+
+**OP** MODIFY `%s`
+*SEARCH*
+```
+noworld
+```
+*REPLACE*
+```
+earth
+```
+
+---
+
+lines remain
+"
+                     buf-name buf-name)))
+       (should (gptel-aibo--apply-suggestions input))
+       (should (equal (buffer-string) "hello\nworld\n")))))
+
 (ert-deftest test-gptel-aibo-apply-last-suggestions ()
-  "Test gptel-aibo--apply-suggestions"
+  "Test gptel-aibo-apply-last-suggestions."
   (with-temp-directory
    working-dir
    (make-directory (expand-file-name ".git" working-dir))
@@ -120,7 +161,7 @@ lines remain
            (should (equal (with-current-buffer working-buffer (buffer-string))
                           "world"))
            (should (file-exists-p filename1))
-           (find-file filename1)
-           (should (string= (buffer-string) "hello\nworld"))
-           (kill-buffer)
+           (with-temp-buffer
+             (insert-file-contents filename1)
+             (should (string= (buffer-string) "hello\nworld")))
            (should-not (file-exists-p filename2))))))))

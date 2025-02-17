@@ -105,8 +105,11 @@ earth"))))))
    (make-directory (expand-file-name ".git" working-dir))
    (setq default-directory working-dir)
    (with-temp-buffer
-     (let ((working-buffer (current-buffer)))
+     (let ((working-buffer (current-buffer))
+           (require-final-newline nil)
+           (filename (make-temp-name (concat working-dir "/"))))
        (with-temp-buffer
+         (set-visited-file-name filename)
          (insert "hello")
          (let* ((target-buffer (current-buffer))
                 (full-content "world")
@@ -128,8 +131,11 @@ earth"))))))
    (make-directory (expand-file-name ".git" working-dir))
    (setq default-directory working-dir)
    (with-temp-buffer
-     (let ((working-buffer (current-buffer)))
+     (let ((working-buffer (current-buffer))
+           (require-final-newline nil)
+           (filename (make-temp-name (concat working-dir "/"))))
        (with-temp-buffer
+         (set-visited-file-name filename)
          (insert "hello
 hello
 world")

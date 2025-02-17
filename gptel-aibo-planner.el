@@ -48,26 +48,26 @@ See `gptel-aibo--apply-suggestions' for implementation details."
           (cond
            ((not working-buffer)
             (message "The response has no working-buffer."))
-           ((not (buffer-live-p working-buffer))
+           ((not (bufferp working-buffer))
+            (message "The response's working-buffer appears to be invalid."))
+           ((and (not gptel-aibo--working-project)
+                 (not (buffer-live-p working-buffer)))
             (message "The response's working-buffer has been closed."))
            (t
             (let* ((begin (prop-match-beginning prop))
                    (end (prop-match-end prop))
                    (response (buffer-substring-no-properties begin end)))
-              (and
-               (eq (gptel-aibo--apply-suggestions response 'dry-run) t)
-               (gptel-aibo--apply-suggestions response))))))
+              (gptel-aibo--apply-suggestions
+               response
+               (when (buffer-live-p working-buffer)
+                 working-buffer))))))
       (message "No response found."))))
 
-(defun gptel-aibo--apply-suggestions (response &optional dry-run)
+(defun gptel-aibo--apply-suggestions (response &optional working-buffer)
   "Parse the RESPONSE for OP commands and apply the actions.
 
-If DRY-RUN is non-nil, simulate operations without making any actual changes.
-
-Returns:
-- t if all operations were applied successfully
-- nil if an error occurred during parsing or execution
-- :no-op if no operations were found"
+Optional WORKING-BUFFER specifies the current buffer where operations are
+applied."
   (setq gptel-aibo--delete-confirmation nil)
   (let* ((parser (cond
                   ((derived-mode-p 'org-mode)
@@ -79,26 +79,22 @@ Returns:
          (parse-result (gptel-aibo-parse-action parser response)))
     (cond
      ((eq (car parse-result) 'error)
-      (message "Error parsing suggestions: %s" (cadr parse-result))
-      nil)
+      (message "Error parsing suggestions: %s" (cadr parse-result)))
      ((null parse-result)
-      (message "No operations found in response")
-      :no-op)
+      (message "No operations found in response"))
      (t
-      (message "Applying OPs%s" (if dry-run "[dry-run]" ""))
-      (and (cl-loop
-            for op in parse-result
-            always
-            (condition-case err
-                (progn
-                  (gptel-aibo-execute op dry-run)
-                  t)
-              (error
-               (message "Error applying OP: %s" (error-message-string err))
-               nil)))
-           (message "All operations applied%s successfully."
-                    (if dry-run "[dry-run]" ""))
-           t)))))
+      (with-current-buffer (or working-buffer (current-buffer))
+        (condition-case err
+            (progn
+              (message "Applying OPs[dry-run]...")
+              (dolist (op parse-result)
+                (gptel-aibo-execute op 'dry-run))
+              (message "Applying OPs...")
+              (dolist (op parse-result)
+                (gptel-aibo-execute op))
+              (message "All operations applied successfully."))
+          (error
+           (message "Error applying OPs: %s" (error-message-string err)))))))))
 
 (provide 'gptel-aibo-planner)
 ;;; gptel-aibo-planner.el ends here

@@ -268,16 +268,28 @@ WINDOW is the newly selected window."
           (unless (eq gptel-aibo--working-buffer gptel-aibo--trigger-buffer)
             (setq gptel-aibo--working-buffer gptel-aibo--trigger-buffer))
           (setq gptel-aibo--trigger-buffer nil))
-      (let ((working-buffer-cand (window-buffer (old-selected-window))))
-        (unless (eq gptel-aibo--working-buffer working-buffer-cand)
-          (when (or (not gptel-aibo--working-project)
-                    (when-let* ((candidate-project
-                                 (with-current-buffer working-buffer-cand
-                                   (project-current)))
-                                (candidate-project-root
-                                 (gptel-aibo--project-root candidate-project)))
-                      (equal gptel-aibo--working-project candidate-project-root)))
-            (setq gptel-aibo--working-buffer working-buffer-cand)))))))
+      (if-let* ((windows (cdr (window-list)))
+                (sorted-windows
+                 (sort windows
+                       (lambda (w1 w2)
+                         (> (window-use-time w1)
+                            (window-use-time w2)))))
+                (top-win
+                 (if (not gptel-aibo--working-project)
+                     (car sorted-windows)
+                   (seq-find
+                    (lambda (win)
+                      (when-let* ((buf (window-buffer win))
+                                  (project (with-current-buffer buf
+                                             (project-current)))
+                                  (project-root-dir
+                                   (gptel-aibo--project-root project)))
+                        (equal gptel-aibo--working-project
+                               project-root-dir)))
+                    sorted-windows)))
+                (working-buffer (window-buffer top-win)))
+          (unless (eq gptel-aibo--working-buffer working-buffer)
+            (setq gptel-aibo--working-buffer working-buffer))))))
 
 (defun gptel-aibo--get-console ()
   "Retrieve a console matching current buffer."
@@ -352,7 +364,8 @@ Optional argument BUFFER specifies the name of the buffer to manage."
         (setq-local gptel-prompt-prefix-alist (gptel-aibo--merge-alists
                                                gptel-aibo-prompt-prefix-alist
                                                gptel-prompt-prefix-alist)))
-      (when-let* ((current-project (project-current))
+      (when-let* (((not gptel-aibo--working-project))
+                  (current-project (project-current))
                   (project-root-dir (gptel-aibo--project-root current-project)))
         (setq gptel-aibo--working-project project-root-dir))
       (unless gptel-aibo-mode (gptel-aibo-mode 1))

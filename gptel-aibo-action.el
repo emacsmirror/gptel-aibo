@@ -38,26 +38,24 @@
 Returns ops list on success, or (error . message) on failure.")
 
 (defun gptel-aibo--is-in-project (working-buffer buffer-or-filename)
-  "Return t if BUFFER-OR-FILENAME is in the same project as WORKING-BUFFER.
+  "Determine if BUFFER-OR-FILENAME is in the same project as WORKING-BUFFER.
 
-- If BUFFER-OR-FILENAME is a buffer and equals WORKING-BUFFER, return t.
-- If WORKING-BUFFER belongs to a project, return t if BUFFER-OR-FILENAME
-  (either a buffer or a filename) is within that project's root.
-- Otherwise, return nil."
-  (cond
-   ((and (bufferp buffer-or-filename) (eq working-buffer buffer-or-filename))
-    t) ;; Case 1: Same buffer
-
-   (t
-    (when-let* ((working-dir
-                 (buffer-local-value 'default-directory working-buffer))
-                (project (project-current nil working-dir))
-                (project-root-dir (gptel-aibo--project-root project))
-                (file-path
-                 (if (bufferp buffer-or-filename)
-                     (buffer-local-value 'default-directory buffer-or-filename)
-                   buffer-or-filename)))
-      (file-in-directory-p file-path project-root-dir)))))
+Returns t if:
+1. BUFFER-OR-FILENAME is the same as WORKING-BUFFER.
+2. BUFFER-OR-FILENAME is within the project root of WORKING-BUFFER.
+Otherwise, returns nil."
+  (or (and (bufferp buffer-or-filename)
+           (eq working-buffer buffer-or-filename))
+      (with-current-buffer working-buffer
+        (when-let* ((project-root
+                     (or gptel-aibo--working-project
+                         (when-let ((project (project-current)))
+                           (gptel-aibo--project-root project))))
+                    (file-name
+                     (if (bufferp buffer-or-filename)
+                         (buffer-file-name buffer-or-filename)
+                       buffer-or-filename)))
+          (file-in-directory-p file-name project-root)))))
 
 (cl-defgeneric gptel-aibo-execute (op &optional dry-run)
   "Execute an operation OP. If DRY-RUN is non-nil, simulate the operation.")
