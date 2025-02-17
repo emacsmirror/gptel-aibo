@@ -107,7 +107,6 @@ lines remain
    (setq default-directory working-dir)
    (with-temp-buffer
      (insert "hello")
-     (message "hh: %s" (buffer-name))
      (let* ((recentf-exclude '(".*"))
             (require-final-newline nil)
             (working-buffer (current-buffer))
