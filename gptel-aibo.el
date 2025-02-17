@@ -168,6 +168,26 @@ suitable content can be suggested, return an empty string.")
 (require 'gptel-aibo-context)
 (require 'gptel-aibo-planner)
 
+(defcustom gptel-aibo-default-mode nil
+  "Default major mode for gptel-aibo console buffers.
+If nil, use `gptel-default-mode' instead.
+Should be a function that turns on a major mode."
+  :type '(choice (const nil) function)
+  :group 'gptel-aibo)
+
+(defcustom gptel-aibo-prompt-prefix-alist
+  '((markdown-mode . "\\> ")
+    (text-mode . "\\> "))
+  "String used as a prefix to the query being sent to the LLM.
+
+This is meant for the user to distinguish between queries and
+responses, and is removed from the query before it is sent.
+
+This is an alist mapping major modes to the prefix strings.  This
+is only inserted in gptel-aibo console buffers."
+  :type '(alist :key-type symbol :value-type string)
+  :group 'gptel-aibo)
+
 (defvar gptel-aibo-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c RET") #'gptel-aibo-send)
@@ -321,21 +341,17 @@ Optional argument BUFFER specifies the name of the buffer to manage."
          (if buffer (get-buffer-create buffer)
            (gptel-aibo--get-console))))
     (with-current-buffer console-buffer
-      (cond ;Set major mode
-       ((eq major-mode gptel-default-mode))
-       ((eq gptel-default-mode 'text-mode)
-        (text-mode)
-        (visual-line-mode 1))
-       (t (funcall gptel-default-mode)))
+      (let ((console-mode (or gptel-aibo-default-mode gptel-default-mode)))
+        (cond ;Set major mode
+         ((eq major-mode console-mode))
+         ((eq console-mode 'text-mode)
+          (text-mode)
+          (visual-line-mode 1))
+         (t (funcall console-mode))))
       (unless (local-variable-p 'gptel-prompt-prefix-alist)
-        (setq-local
-         gptel-prompt-prefix-alist
-         (mapcar (lambda (pair)
-                   (cond
-                    ((eq (car pair) 'markdown-mode) (cons 'markdown-mode "\\> "))
-                    ((eq (car pair) 'text-mode) (cons 'text-mode "\\> "))
-                    (t pair)))
-                 gptel-prompt-prefix-alist)))
+        (setq-local gptel-prompt-prefix-alist (gptel-aibo--merge-alists
+                                               gptel-aibo-prompt-prefix-alist
+                                               gptel-prompt-prefix-alist)))
       (when-let* ((current-project (project-current))
                   (project-root-dir (gptel-aibo--project-root current-project)))
         (setq gptel-aibo--working-project project-root-dir))
@@ -349,6 +365,15 @@ Optional argument BUFFER specifies the name of the buffer to manage."
       (when (called-interactively-p 'any)
         (setq gptel-aibo--trigger-buffer trigger-buffer)
         (display-buffer (current-buffer) gptel-display-buffer-action)))))
+
+(defun gptel-aibo--merge-alists (a1 a2)
+  "Merge two alists A1 and A2.
+Keys from A1 take precedence and appear first in the result.
+Returns a new alist containing all unique keys."
+  (let* ((a2-filtered (cl-remove-if (lambda (pair)
+                                     (assoc (car pair) a1))
+                                   a2)))
+    (append a1 a2-filtered)))
 
 (defvar gptel-aibo-send--handlers
   `((WAIT ,#'gptel--handle-wait)
