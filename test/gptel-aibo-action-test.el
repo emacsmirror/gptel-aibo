@@ -19,6 +19,8 @@ The temporary directory will be deleted on exit/error."
            (op (gptel-aibo-make-mod-op
                 :target buffer-name
                 :full-content full-content)))
+      (gptel-aibo-execute op 'dry-run)
+      (should (string= (buffer-string) "hello"))
       (gptel-aibo-execute op)
       (with-current-buffer buffer-name
         (should (string= (buffer-string) full-content))))))
@@ -33,6 +35,10 @@ world")
            (op (gptel-aibo-make-mod-op
                 :target buffer-name
                 :replacements '(("hello" . "hi") ("world" . "earth")))))
+      (gptel-aibo-execute op 'dry-run)
+      (should (string= (buffer-string) "hello
+hello
+world"))
       (gptel-aibo-execute op)
       (with-current-buffer buffer-name
         (should (string= (buffer-string) "hi
@@ -46,6 +52,7 @@ earth"))))))
          (op (gptel-aibo-make-mod-op
               :target buffer-name
               :full-content full-content)))
+    (should-error (gptel-aibo-execute op 'dry-run) :type 'error)
     (should-error (gptel-aibo-execute op) :type 'error)))
 
 (ert-deftest test-gptel-aibo-execute-mod-op-full-content-not-project ()
@@ -65,6 +72,7 @@ earth"))))))
                      :target (buffer-name target-buffer)
                      :full-content full-content)))
            (with-current-buffer working-buffer
+             (should-error (gptel-aibo-execute op 'dry-run) :type 'error)
              (should-error (gptel-aibo-execute op) :type 'error))))))))
 
 (ert-deftest test-gptel-aibo-execute-mod-op-full-content-other-project ()
@@ -87,6 +95,7 @@ earth"))))))
                       :target (buffer-name target-buffer)
                       :full-content full-content)))
             (with-current-buffer working-buffer
+              (should-error (gptel-aibo-execute op 'dry-run) :type 'error)
               (should-error (gptel-aibo-execute op) :type 'error)))))))))
 
 (ert-deftest test-gptel-aibo-execute-mod-op-full-content-in-project ()
@@ -105,6 +114,9 @@ earth"))))))
                      :target (buffer-name target-buffer)
                      :full-content full-content)))
            (with-current-buffer working-buffer
+             (gptel-aibo-execute op 'dry-run)
+             (with-current-buffer target-buffer
+               (should (string= (buffer-string) "hello")))
              (gptel-aibo-execute op)
              (with-current-buffer target-buffer
                (should (string= (buffer-string) full-content))))))))))
@@ -126,6 +138,11 @@ world")
                      :target (buffer-name target-buffer)
                      :replacements '(("hello" . "hi") ("world" . "earth")))))
            (with-current-buffer working-buffer
+             (gptel-aibo-execute op 'dry-run)
+             (with-current-buffer target-buffer
+               (should (string= (buffer-string) "hello
+hello
+world")))
              (gptel-aibo-execute op)
              (with-current-buffer target-buffer
                (should (string= (buffer-string) "hi
@@ -146,10 +163,11 @@ earth"))))))))))
             (op (gptel-aibo-make-creation-op
                  :filename filename
                  :content content)))
+       (gptel-aibo-execute op 'dry-run)
+       (should-not (file-exists-p filename))
        (gptel-aibo-execute op)
-       (find-file filename)
-       (should (string= (buffer-string) content))
-       (kill-buffer)))))
+       (insert-file-contents filename)
+       (should (string= (buffer-string) content))))))
 
 (ert-deftest test-gptel-aibo-execute-creation-op-not-project ()
   "Test gptel-aibo-execute with creation op not project."
@@ -164,6 +182,7 @@ earth"))))))))))
             (op (gptel-aibo-make-creation-op
                  :filename filename
                  :content content)))
+       (should-error (gptel-aibo-execute op 'dry-run))
        (should-error (gptel-aibo-execute op))))))
 
 (ert-deftest test-gptel-aibo-execute-creation-op-other-project ()
@@ -181,6 +200,7 @@ earth"))))))))))
              (op (gptel-aibo-make-creation-op
                   :filename filename
                   :content content)))
+        (should-error (gptel-aibo-execute op 'dry-run))
         (should-error (gptel-aibo-execute op)))))))
 
 (ert-deftest test-gptel-aibo-execute-del-op ()
@@ -197,6 +217,13 @@ earth"))))))))))
 
        (write-region "" nil filename)
        (should (file-exists-p filename))
+
+       (cl-letf (((symbol-function 'read-char-choice)
+                  (lambda (&rest _)
+                    (error "Should not call read-char-choice when dry-run")  )))
+         (gptel-aibo-execute op 'dry-run))
+       (should (file-exists-p filename))
+
        (cl-letf (((symbol-function 'read-char-choice) (lambda (&rest _)
                                                         ?y)))
          (gptel-aibo-execute op))
@@ -261,6 +288,7 @@ earth"))))))))))
                  :filename filename)))
        (setq gptel-aibo--delete-confirmation nil)
        (should-not (file-exists-p filename))
+       (should-error (gptel-aibo-execute op 'dry-run))
        (should-error (gptel-aibo-execute op))))))
 
 (ert-deftest test-gptel-aibo-execute-del-op-not-project ()
@@ -277,6 +305,7 @@ earth"))))))))))
                  :filename filename)))
        (write-region "" nil filename)
        (should (file-exists-p filename))
+       (should-error (gptel-aibo-execute op 'dry-run))
        (should-error (gptel-aibo-execute op))))))
 
 (ert-deftest test-gptel-aibo-execute-del-op-other-project ()
@@ -299,5 +328,6 @@ earth"))))))))))
             (write-region "" nil filename)
             (should (file-exists-p filename))
             (with-current-buffer working-buffer
+              (should-error (gptel-aibo-execute op 'dry-run))
               (should-error (gptel-aibo-execute op))))))))))
 

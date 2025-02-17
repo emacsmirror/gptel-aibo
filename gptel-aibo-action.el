@@ -90,10 +90,11 @@ If DRY-RUN is non-nil, simulate the operation without making any changes."
                buffer-name))
        (full-content
         (with-current-buffer op-buffer
-          (erase-buffer)
-          (insert full-content)
-          (when (buffer-file-name)
-            (save-buffer))))
+          (unless dry-run
+            (erase-buffer)
+            (insert full-content)
+            (when (buffer-file-name)
+              (save-buffer)))))
        (t
         (with-current-buffer op-buffer
           (goto-char (point-min))
