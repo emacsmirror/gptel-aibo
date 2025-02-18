@@ -149,7 +149,7 @@ lines remain")
 
 ---
 
-**OP** MODIFY `buffer1`
+=OP= MODIFY `buffer1`
 *SEARCH*
 ```
 hello
@@ -161,7 +161,7 @@ world
 
 ---
 
-**OP** CREATE `filename1`
+=OP= CREATE `filename1`
 ```
 hello
 world
@@ -169,7 +169,7 @@ world
 
 ---
 
-**OP** DELETE `filename2`
+=OP= DELETE `filename2`
 
 ---
 

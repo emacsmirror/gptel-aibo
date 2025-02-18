@@ -151,7 +151,7 @@ lines remain")
 
 ---
 
-*OP* MODIFY =buffer1=
+=OP= MODIFY =buffer1=
 /SEARCH/
 #+BEGIN_SRC
 hello
@@ -163,7 +163,7 @@ world
 
 ---
 
-*OP* CREATE =filename1=
+=OP= CREATE =filename1=
 #+BEGIN_SRC
 hello
 world
@@ -171,7 +171,7 @@ world
 
 ---
 
-*OP* DELETE =filename2=
+=OP= DELETE =filename2=
 
 ---
 

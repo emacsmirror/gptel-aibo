@@ -17,7 +17,7 @@
              (format "
 ---
 
-**OP** MODIFY `%s`
+=OP= MODIFY `%s`
 *SEARCH*
 ```
 hello
@@ -29,7 +29,7 @@ world
 
 ---
 
-**OP** CREATE `%s`
+=OP= CREATE `%s`
 ```
 hello
 world
@@ -37,7 +37,7 @@ world
 
 ---
 
-**OP** DELETE `%s`
+=OP= DELETE `%s`
 
 ---
 
@@ -69,7 +69,7 @@ Nothing should be changed."
              (format "
 ---
 
-**OP** MODIFY `%s`
+=OP= MODIFY `%s`
 *SEARCH*
 ```
 hello
@@ -81,7 +81,7 @@ hi
 
 ---
 
-**OP** MODIFY `%s`
+=OP= MODIFY `%s`
 *SEARCH*
 ```
 noworld
@@ -117,7 +117,7 @@ lines remain
 
 ---
 
-**OP** MODIFY `%s`
+=OP= MODIFY `%s`
 *SEARCH*
 ```
 hello
@@ -129,7 +129,7 @@ world
 
 ---
 
-**OP** CREATE `%s`
+=OP= CREATE `%s`
 ```
 hello
 world
@@ -137,7 +137,7 @@ world
 
 ---
 
-**OP** DELETE `%s`
+=OP= DELETE `%s`
 
 ---
 
