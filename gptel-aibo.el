@@ -170,6 +170,7 @@ suitable content can be suggested, return an empty string.")
 (require 'gptel-context)
 (require 'gptel-aibo-context)
 (require 'gptel-aibo-planner)
+(require 'gptel-aibo-face)
 
 (defcustom gptel-aibo-default-mode nil
   "Default major mode for gptel-aibo console buffers.
@@ -227,9 +228,11 @@ is only inserted in gptel-aibo console buffers."
                       (cdr header-line-format))))
         (add-hook 'window-selection-change-functions
                   #'gptel-aibo--window-selection-change nil t)
+        (font-lock-add-keywords nil (gptel-aibo-op-generate-keywords))
         (message "gptel-aibo-mode enabled"))
     (remove-hook 'window-selection-change-functions
                  #'gptel-aibo--window-selection-change)
+    (font-lock-remove-keywords nil (gptel-aibo-op-generate-keywords))
     (setq-local gptel-directives gptel-aibo--old-directives)
     (setq-local gptel--system-message gptel-aibo--old-system-message)
     (setq-local gptel-use-context gptel-aibo--old-use-context)
