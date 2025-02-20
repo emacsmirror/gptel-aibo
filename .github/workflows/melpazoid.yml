@@ -1,8 +1,5 @@
 # melpazoid <https://github.com/riscy/melpazoid> build checks.
 
-# If your package is on GitHub, enable melpazoid's checks by copying this file
-# to .github/workflows/melpazoid.yml and modifying RECIPE and EXIST_OK below.
-
 name: melpazoid
 on: [push, pull_request]
 
@@ -24,8 +21,6 @@ jobs:
     - name: Run
       env:
         LOCAL_REPO: ${{ github.workspace }}
-        # RECIPE is your recipe as written for MELPA:
-        RECIPE: (shx :fetcher github :repo "riscy/shx-for-emacs")
-        # set this to false (or remove it) if the package isn't on MELPA:
-        EXIST_OK: true
+        RECIPE: (gptel-aibo :fetcher github :repo "dolmens/gptel-aibo")
+        # EXIST_OK: true
       run: echo $GITHUB_REF && make -C ~/melpazoid
