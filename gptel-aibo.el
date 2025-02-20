@@ -9,7 +9,7 @@
 ;; Version: 0.0.1
 ;; Keywords: emacs tools editing gptel ai assistant code-completion productivity
 ;; Homepage: https://github.com/dolmens/gptel-aibo
-;; Package-Requires: ((emacs "27.1") (gptel "20250211"))
+;; Package-Requires: ((emacs "27.1") (gptel "0.9.7"))
 
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -391,18 +391,6 @@ Returns a new alist containing all unique keys."
                                    a2)))
     (append a1 a2-filtered)))
 
-(defvar gptel-aibo-send--handlers
-  `((WAIT ,#'gptel--handle-wait)
-    (TYPE ,#'gptel--handle-pre-insert)
-    (ERRS ,#'gptel--handle-error ,#'gptel--fsm-last)
-    (TOOL ,#'gptel--handle-tool-use)
-    (DONE ,#'gptel-aibo--handle-post-insert
-          ,#'gptel--handle-post-insert
-          ,#'gptel--fsm-last))
-  "Alist specifying handlers for `gptel-aibo-send' state transitions.
-
-See `gptel-request--handlers' for details.")
-
 ;;;###autoload
 (defun gptel-aibo-send ()
   "Send the current context and request to GPT for processing."
@@ -412,10 +400,20 @@ See `gptel-request--handlers' for details.")
   (unless gptel-context--alist
     (setq gptel-context--alist (list (cons gptel-aibo--working-buffer nil))))
 
-  (gptel-request nil
-    :stream gptel-stream
-    :context `(:working-buffer ,gptel-aibo--working-buffer)
-    :fsm (gptel-make-fsm :handlers gptel-aibo-send--handlers)))
+  (if (save-excursion
+        (when (re-search-backward "[^[:space:]]" nil t)
+          (forward-char)
+          (let ((end (point))
+                (beg))
+            (unless (text-property-search-backward 'gptel 'response)
+              (goto-char (point-min)))
+            (re-search-forward "[^[:space:]]" nil t)
+            (backward-char)
+            (setq beg (point))
+            (add-text-properties beg end `(gptaiu ,gptel-aibo--working-buffer)))
+          t))
+      (gptel-send)
+    (message "gptel-aibo received empty input. Please say something.")))
 
 (defun gptel-aibo--handle-post-insert (fsm)
   "Handle post-insert operations for FSM.

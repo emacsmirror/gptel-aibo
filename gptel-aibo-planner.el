@@ -44,15 +44,16 @@ See `gptel-aibo--apply-suggestions' for implementation details."
     (goto-char (point-max))
     (if-let ((prop (text-property-search-backward 'gptel 'response t)))
         (let ((working-buffer
-               (get-text-property (prop-match-beginning prop) 'gptai)))
+               (and (text-property-search-backward 'gptaiu)
+                    (get-text-property (point) 'gptaiu))))
           (cond
            ((not working-buffer)
-            (message "The response has no working-buffer."))
+            (message "The request has no working-buffer."))
            ((not (bufferp working-buffer))
-            (message "The response's working-buffer appears to be invalid."))
+            (message "The request's working-buffer appears to be invalid."))
            ((and (not gptel-aibo--working-project)
                  (not (buffer-live-p working-buffer)))
-            (message "The response's working-buffer has been closed."))
+            (message "The request's working-buffer has been closed."))
            (t
             (let* ((begin (prop-match-beginning prop))
                    (end (prop-match-end prop))
