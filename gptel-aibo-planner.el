@@ -48,7 +48,7 @@ See `gptel-aibo--apply-suggestions' for implementation details."
                     (get-text-property (point) 'gptaiu))))
           (cond
            ((not working-buffer)
-            (message "The request has no working-buffer."))
+            (message "The original request is missing."))
            ((not (bufferp working-buffer))
             (message "The request's working-buffer appears to be invalid."))
            ((and (not gptel-aibo--working-project)

@@ -413,7 +413,7 @@ Returns a new alist containing all unique keys."
             (add-text-properties beg end `(gptaiu ,gptel-aibo--working-buffer)))
           t))
       (gptel-send)
-    (message "gptel-aibo received empty input. Please say something.")))
+    (message "Empty input received. Could you please type something?")))
 
 (defun gptel-aibo--handle-post-insert (fsm)
   "Handle post-insert operations for FSM.
