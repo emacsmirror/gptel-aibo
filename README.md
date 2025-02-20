@@ -52,13 +52,18 @@ With the `gptel-aibo` interactive command, you can open or switch to an existing
 mode enabled, an extension of `gptel-mode`.
 
 To get started, open your file, move the cursor to the section you're working
-on, and then switch to the gptel-aibo console. There, you can talk to the LLM
+on, or even start from a project-related buffer, such as the compilation buffer,
+and then switch to the gptel-aibo console. There, you can talk to the LLM
 and receive suggestions. Use `gptel-aibo-send` to send your request, which is
 bound to `C-c RET`, just like the send command in `gptel-mode`.
 
 Once a response is received, you can apply it using the command 
 `gptel-aibo-apply-last-suggestions` (bound to `C-c !`), or continue the
 conversation with more detailed instructions.
+
+There is also a custom variable, `gptel-aibo-auto-apply`. When set, gptel-aibo
+will automatically apply the LLM’s response to your project after receiving it.
+This makes gptel-aibo function like the aider’s no-auto-commits. Use it carefully!
 
 ### Completion at point
 `gptel-aibo` also provides a minor mode `gptel-aibo-complete-mode` and an
@@ -87,6 +92,11 @@ taking away their favorite key. You can also bind your own key, for example:
 ![Starship segment](assets/aibo-segment-case-800-10.gif)
 
 ### Refactor a sample project
+*NOTE*: Tasks like refactoring, which involve multiple files, require you to
+set `gptel-aibo-max-buffer-count` to a larger value, such as 5. In the long run,
+this inconvenience will be eliminated through a more automated approach, like
+tool calling.
+
 ![Sample project refactor](assets/aibo-refactor-sample-800-10.gif)
 
 ### Other common tasks & ideas
@@ -120,6 +130,30 @@ taking away their favorite key. You can also bind your own key, for example:
   that are automatically sent to the LLM.
   
   The default value is 2.
+
+- `gptel-aibo-default-mode`
+
+  Functions similarly to `gptel-default-mode`; when set, it takes precedence
+  over the latter.
+- `gptel-aibo-prompt-prefix-alist`
+
+  Functions similarly to `gptel-default-mode`; when set, it takes precedence
+  over the latter.
+
+### Face Settings
+- `gptel-aibo-op-display`
+
+  Currently, the `<OP>` marker is displayed as the character 🏹 in the
+  gptel-aibo console. If you prefer a different symbol, you can define another
+  one, choose different characters for different operations, or even disable it
+  entirely.
+- `gptel-aibo-op-face`
+
+  This setting controls the face for OP action names, such as `MODIFY`, `CREATE`,
+  and `DELETE`. You can customize it, or even set different faces for different
+  actions.
+
+  For more details, check out `gptel-aibo-face.el`.
 
 ## Miscellaneous
 To make the gptel-aibo console look a bit fancier, I copied the following
