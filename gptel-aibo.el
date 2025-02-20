@@ -394,6 +394,16 @@ Returns a new alist containing all unique keys."
                                    a2)))
     (append a1 a2-filtered)))
 
+(defcustom gptel-aibo-auto-apply nil
+  "If non-nil, automatically apply LLM-returned suggestions."
+  :type 'boolean
+  :group 'gptel-aibo)
+
+(defun gptel-aibo--auto-apply (beg end)
+  "Automatically apply suggestions in the region (BEG END) if it's non-empty."
+  (when (> end beg)
+    (gptel-aibo--apply-suggestions-in-region beg end 'ignore)))
+
 ;;;###autoload
 (defun gptel-aibo-send ()
   "Send the current context and request to GPT for processing."
@@ -402,6 +412,12 @@ Returns a new alist containing all unique keys."
   ;; HACK: gptel requires a non-empty context alist for context wrapping.
   (unless gptel-context--alist
     (setq gptel-context--alist (list (cons gptel-aibo--working-buffer nil))))
+
+  (if gptel-aibo-auto-apply
+      (add-hook 'gptel-post-response-functions
+                #'gptel-aibo--auto-apply nil t)
+    (remove-hook 'gptel-post-response-functions
+                 #'gptel-aibo--auto-apply t))
 
   (if (save-excursion
         (when (re-search-backward "[^[:space:]]" nil t)

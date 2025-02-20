@@ -42,7 +42,20 @@ See `gptel-aibo--apply-suggestions' for implementation details."
   (interactive)
   (save-excursion
     (goto-char (point-max))
-    (if-let ((prop (text-property-search-backward 'gptel 'response t)))
+    (if-let* ((prop (text-property-search-backward 'gptel 'response t))
+              (beg (prop-match-beginning prop))
+              (end (prop-match-end prop)))
+        (gptel-aibo--apply-suggestions-in-region beg end)
+      (message "No response found."))))
+
+(defun gptel-aibo--apply-suggestions-in-region (beg end &optional ignore-empty)
+  "Parse and apply GPT suggestions in region between BEG and END.
+
+If IGNORE-EMPTY is non-nil, suppress the empty response message.
+See `gptel-aibo--apply-suggestions' for implementation details."
+  (if (> end beg)
+      (save-excursion
+        (goto-char beg)
         (let ((working-buffer
                (and (text-property-search-backward 'gptaiu)
                     (get-text-property (point) 'gptaiu))))
@@ -55,20 +68,20 @@ See `gptel-aibo--apply-suggestions' for implementation details."
                  (not (buffer-live-p working-buffer)))
             (message "The request's working-buffer has been closed."))
            (t
-            (let* ((begin (prop-match-beginning prop))
-                   (end (prop-match-end prop))
-                   (response (buffer-substring-no-properties begin end)))
+            (let ((response (buffer-substring-no-properties beg end)))
               (gptel-aibo--apply-suggestions
                response
                (when (buffer-live-p working-buffer)
-                 working-buffer))))))
-      (message "No response found."))))
+                 working-buffer)))))))
+    (unless ignore-empty
+      (message "Empty response."))))
 
-(defun gptel-aibo--apply-suggestions (response &optional working-buffer)
+(defun gptel-aibo--apply-suggestions
+    (response &optional working-buffer ignore-empty)
   "Parse the RESPONSE for OP commands and apply the actions.
 
 Optional WORKING-BUFFER specifies the current buffer where operations are
-applied."
+applied. If IGNORE-EMPTY is non-nil, suppress the empty response message."
   (setq gptel-aibo--delete-confirmation nil)
   (let* ((parser (cond
                   ((derived-mode-p 'org-mode)
@@ -82,7 +95,8 @@ applied."
      ((eq (car parse-result) 'error)
       (message "Error parsing suggestions: %s" (cadr parse-result)))
      ((null parse-result)
-      (message "No operations found in response"))
+      (unless ignore-empty
+        (message "No operations found in response")))
      (t
       (with-current-buffer (or working-buffer (current-buffer))
         (condition-case err
