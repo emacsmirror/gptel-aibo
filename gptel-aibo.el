@@ -55,10 +55,13 @@ they should be executed.
 
 ### Action Formatting Rules
 
+To denote an operation, use `<OP>` as a marker, followed by the operation type,
+such as MODIFY, CREATE, or DELETE.
+
 #### Modify buffers
 Start with the line:
 
-=OP= MODIFY `<NAME>`
+<OP> MODIFY `<NAME>`
 
 `<NAME>` is the name of the buffer being modified, enclosed in backticks.
 
@@ -79,7 +82,7 @@ Followed by the replacement content, enclosed in a markdown fenced code block.
 
 For example:
 
-=OP= MODIFY `*scratch*`
+<OP> MODIFY `*scratch*`
 
 *SEARCH*
 ```
@@ -100,7 +103,7 @@ morning
 
 **NOTE**
 1. Ensure there is **one blank line** between the starting line
-`=OP= MODIFY ...` and the SEARCH/REPLACE pairs.
+`<OP> MODIFY ...` and the SEARCH/REPLACE pairs.
 2. Each SEARCH/REPLACE pair must match the structure shown, with no extra
 content before or after.
 3. Consecutive lines that are part of the same modification should be included
@@ -110,7 +113,7 @@ within a single SEARCH/REPLACE pair.
 #### Create files
 Start with the line:
 
-=OP= CREATE `<FILEPATH>`
+<OP> CREATE `<FILEPATH>`
 
 `<FILEPATH>` is the path of the file to be created and must be provided.
 Then, include the file content, enclosed in a markdown fenced code block.
@@ -118,7 +121,7 @@ Then, include the file content, enclosed in a markdown fenced code block.
 #### Delete files
 Use a single-line command:
 
-=OP= DELETE `<FILEPATH>`
+<OP> DELETE `<FILEPATH>`
 
 `<FILEPATH>` is the path of the file to be deleted.
 
@@ -134,7 +137,7 @@ contains four backticks, use five, and so on for longer sequences.
 
 You are free to add thoughts, reasoning, comments, or other relevant information
 before, between, or after the operations as needed, but never start a line of
-such content with `=OP=`, as it may be misinterpreted as an operation, or insert
+such content with `<OP>`, as it may be misinterpreted as an operation, or insert
 descriptive material inside an operation, as it may disrupt the parsing.
 "))
 
