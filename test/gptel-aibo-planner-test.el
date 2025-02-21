@@ -1,6 +1,15 @@
 (require 'ert)
 (require 'gptel-aibo-planner)
 
+(defmacro with-temp-directory (dir &rest body)
+  "Create DIR as a temporary directory and invoke BODY.
+
+The temporary directory will be deleted on exit/error."
+  `(let ((,dir (make-temp-file "gptel-aibo-test-" t)))
+    (unwind-protect
+        (progn ,@body)
+      (delete-directory ,dir t))))
+
 (ert-deftest test-gptel-aibo--apply-suggestions ()
   "Test gptel-aibo--apply-suggestions."
   (with-temp-directory
@@ -148,11 +157,8 @@ lines remain
        (should-not (file-exists-p filename1))
        (should (file-exists-p filename2))
        (with-temp-buffer
-         (add-text-properties
-          0 (length response)
-          `(gptel response gptai ,working-buffer)
-          response)
-         (insert response)
+         (insert (propertize "Request: Do it." 'gptaiu working-buffer))
+         (insert (propertize response 'gptel 'response))
          (cl-letf (((symbol-function 'read-char-choice)
                     (lambda (&rest _)
                       ?y)))
