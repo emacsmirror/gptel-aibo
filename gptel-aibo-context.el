@@ -317,13 +317,13 @@ POS is the position to center on, or the current point if nil."
           (when expand-line-limit
             (save-excursion
               (goto-char (car boundary))
-              (when (and (/= (point) (line-beginning-position))
+              (when (and (not (bolp))
                          (<= (- (point) (line-beginning-position))
                              expand-line-limit))
                 (setcar boundary (line-beginning-position))))
             (save-excursion
               (goto-char (cdr boundary))
-              (when (and (/= (point) (line-end-position))
+              (when (and (not (eolp))
                          (<= (- (line-end-position) (point))
                              expand-line-limit))
                 (setcdr boundary (line-end-position)))))
