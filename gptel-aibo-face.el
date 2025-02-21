@@ -31,9 +31,8 @@
   (when (bound-and-true-p gptel-aibo-mode)
     (font-lock-remove-keywords nil (gptel-aibo-op-generate-keywords))
     (font-lock-add-keywords nil (gptel-aibo-op-generate-keywords))
-    (if (fboundp 'font-lock-flush)
-        (font-lock-flush)
-      (with-no-warnings (font-lock-fontify-buffer)))))
+    (when (fboundp 'font-lock-flush)
+      (font-lock-flush))))
 
 (defcustom gptel-aibo-op-marker-face nil
   "Face for the <OP> marker symbol."
