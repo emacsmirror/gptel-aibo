@@ -61,13 +61,13 @@ will be discarded."
   :safe #'natnump)
 
 (defvar-local gptel-aibo--working-project nil
-  "Current working project of gptel-aibo.")
+  "Current working project of `gptel-aibo'.")
 
 (defvar-local gptel-aibo--working-buffer nil
-  "Current working buffer of gptel-aibo.")
+  "Current working buffer of `gptel-aibo'.")
 
 (defvar-local gptel-aibo--trigger-buffer nil
-  "The buffer in which the gptel-aibo command was triggered.")
+  "The buffer in which the `gptel-aibo' command was triggered.")
 
 (defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."

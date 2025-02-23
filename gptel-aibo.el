@@ -173,7 +173,7 @@ suitable content can be suggested, return an empty string.")
 (require 'gptel-aibo-face)
 
 (defcustom gptel-aibo-default-mode nil
-  "Default major mode for gptel-aibo console buffers.
+  "Default major mode for `gptel-aibo' console buffers.
 If nil, use `gptel-default-mode' instead.
 Should be a function that turns on a major mode."
   :type '(choice (const nil) function)
@@ -188,7 +188,7 @@ This is meant for the user to distinguish between queries and
 responses, and is removed from the query before it is sent.
 
 This is an alist mapping major modes to the prefix strings.  This
-is only inserted in gptel-aibo console buffers."
+is only inserted in `gptel-aibo' console buffers."
   :type '(alist :key-type symbol :value-type string)
   :group 'gptel-aibo)
 
@@ -201,7 +201,7 @@ is only inserted in gptel-aibo console buffers."
 
 ;;;###autoload
 (define-minor-mode gptel-aibo-mode
-  "Minor mode for gptel-aibo interacting with LLMs."
+  "Minor mode for `gptel-aibo' interacting with LLMs."
   :lighter " GPTel-Aibo"
   :keymap gptel-aibo-mode-map
   (if gptel-aibo-mode
@@ -607,7 +607,7 @@ See `gptel--url-get-response' for details."
 
 ;;;###autoload
 (define-minor-mode gptel-aibo-complete-mode
-  "Minor mode gptel-aibo llm completions."
+  "Minor mode `gptel-aibo' llm completions."
   :lighter " GPTel-Aibo-Complete"
   :keymap gptel-aibo-complete-mode-map)
 
