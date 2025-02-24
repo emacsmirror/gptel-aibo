@@ -19,9 +19,11 @@ gptel’s partner, or the user’s.
 This package requires [gptel](https://github.com/karthink/gptel) and access to any
 LLM through it. See its README for details on setting up your LLM environment.
 
-Since this package is developed based on the Doom Emacs `gptel` package, it uses
-a very recent version of `gptel`. If you're not using Doom Emacs, it's recommended
-to install `gptel` using `straight.el` or the built-in `package-vc-install`.
+`gptel-aibo` is available on MELPA. If you have MELPA already set up, you can
+install it using `package-install`, or by adding the following to your configuration:
+```elisp
+(use-package gptel-aibo :ensure t)
+```
 
 ### Doom Emacs
 In your `packages.el`, add this line:
