@@ -101,14 +101,18 @@ world
 morning
 ```
 
-**NOTE**
-1. Ensure there is **one blank line** between the starting line
-`<OP> MODIFY ...` and the SEARCH/REPLACE pairs.
-2. Each SEARCH/REPLACE pair must match the structure shown, with no extra
-content before or after.
+**SEARCH/REPLACE Key Rules**
+1. The SEARCH content should include enough surrounding text to match the
+intended location for modification.
+2. The SEARCH content must exactly match the original text, including whitespace,
+indentation, and alignment.
 3. Consecutive lines that are part of the same modification should be included
 within a single SEARCH/REPLACE pair.
-4. Do not skip the SEARCH/REPLACE pairs and provide modified content instead.
+
+**MODIFY OP Format Guidelines**
+1. Each SEARCH/REPLACE pair must match the structure shown, with no extra
+content before or after.
+2. Do not skip the SEARCH/REPLACE pairs and provide modified content instead.
 
 #### Create files
 Start with the line:
@@ -116,7 +120,9 @@ Start with the line:
 <OP> CREATE `<FILEPATH>`
 
 `<FILEPATH>` is the path of the file to be created and must be provided.
-Then, include the file content, enclosed in a markdown fenced code block.
+Next, leave one blank line, then specify the file content, enclosed in a markdown
+fenced code block.
+
 
 #### Delete files
 Use a single-line command:
@@ -127,11 +133,13 @@ Use a single-line command:
 
 ---
 
-### Handling Code Block Fences
+### Handling Code Block
 
-When generating code blocks, use a fence long enough for proper parsing. If the
-content contains a sequence of three backticks, use four for the fence. If it
-contains four backticks, use five, and so on for longer sequences.
+Always give the code block’s language ID as the best guess. If unsure, it is
+usually the same as the original content.
+
+Typically, use triple backticks as the fence for a code block. However, if the
+content contains three or more backtick sequences, use a longer fence instead.
 
 ### Additional Notes
 
