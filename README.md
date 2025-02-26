@@ -4,13 +4,13 @@
 
 **gptel-aibo** is an AI writing assistant system built on top of
 [gptel](https://github.com/karthink/gptel) .
-It helps you create and manage content in Emacs, including code, documentation,
-and even novels. As you talk to the LLM, it automatically sends the content (or
-a portion of it) that you're currently working on, allowing you to refer to
-elements like "this function," "this class," "this file," etc. It also defines
-an action set and its format with the LLM, so once a response is received, you
-can easily apply the suggestions with a single command (
-`gptel-aibo-apply-last-suggestions`, bound to `C-c !`).
+It helps you create and manage content in Emacs, including code, documents, and
+even fiction, along with many other possibilities. As you talk to the LLM, it
+automatically sends the content (or a portion of it) that you're currently
+working on, allowing you to refer to elements like "this function," "this class,"
+or "this file," etc. It also defines an action set and its format with the LLM,
+so once a response is received, you can easily apply the suggestions with a single
+command (`gptel-aibo-apply-last-suggestions`, bound to `C-c !`).
 
 The term *aibo*, meaning partner, is currently ambiguous—it could refer to
 gptel’s partner, or the user’s.
@@ -28,7 +28,7 @@ install it using `package-install`, or by adding the following to your configura
 ### Doom Emacs
 In your `packages.el`, add this line:
 ```elisp
-(package! gptel-aibo :recipe (:host github :repo "dolmens/gptel-aibo"))
+(package! gptel-aibo)
 ```
 **Note**: In the `gptel-aibo` interface, it overrides the `flycheck` keybinding
 `C-c !` (you generally won't need to use `flycheck` in the `gptel-aibo`

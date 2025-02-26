@@ -38,7 +38,7 @@
 (defvar gptel-aibo--system-role
   "You are an expert assistant specializing in helping users with Emacs for
 creating and managing various types of content, including code, documents,
-and even novels.")
+and even fiction.")
 
 (defvar gptel-aibo--system-message
   (concat
