@@ -196,8 +196,6 @@ or (error . message) on failure."
   "Parse a fenced code block from LINES.
 Returns (content . remaining-lines) on success,
 or (error . message) on failure."
-  (while (and lines (string-blank-p (car lines)))
-    (setq lines (cdr lines)))
   (if (null lines)
       (list 'error "Empty input when expecting code block" lines)
     (let ((start-fence-regex "^\\(`\\{3,\\}\\)"))
