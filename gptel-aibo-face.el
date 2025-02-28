@@ -112,5 +112,17 @@
        (1 '(face ,gptel-aibo-op-marker-face display ,delete-display) t)
        (2 'gptel-aibo-op-delete-face t)))))
 
+(defface gptel-aibo-completion-face
+  '((((class color) (background light))
+     :extend t
+     :background "#cceecc"
+     :foreground "#22aa22")
+    (((class color) (background dark))
+     :extend t
+     :background "#336633"
+     :foreground "#cceecc"))
+  "Face for lines in a diff that have been added."
+  :group 'gptel-aibo)
+
 (provide 'gptel-aibo-face)
 ;;; gptel-aibo-face.el ends here

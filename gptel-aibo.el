@@ -573,7 +573,7 @@ See `gptel--url-get-response' for details."
                    (end (point))
                    (ov (make-overlay beg end))
                    (map (make-sparse-keymap)))
-              (overlay-put ov 'face '(:background "lightgray"))
+              (overlay-put ov 'face 'gptel-aibo-completion-face)
               (overlay-put ov 'keymap map)
 
               (define-key map (kbd "TAB")
