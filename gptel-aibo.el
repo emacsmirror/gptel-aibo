@@ -178,6 +178,7 @@ suitable content can be suggested, return an empty string.")
 (require 'gptel-context)
 (require 'gptel-aibo-context)
 (require 'gptel-aibo-planner)
+(require 'gptel-aibo-summon)
 (require 'gptel-aibo-face)
 
 (defcustom gptel-aibo-default-mode nil

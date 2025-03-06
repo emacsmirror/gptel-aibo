@@ -124,6 +124,18 @@
   "Face for lines in a diff that have been added."
   :group 'gptel-aibo)
 
+(defface gptel-aibo-diff-hunk-heading
+  '((((class color) (background light))
+     :extend t
+     :background "grey90"
+     :foreground "grey20")
+    (((class color) (background dark))
+     :extend t
+     :background "grey25"
+     :foreground "grey95"))
+  "Face for diff hunk headings."
+  :group 'magit-faces)
+
 (defface gptel-aibo-diff-added
   '((((class color) (background light))
      :extend t

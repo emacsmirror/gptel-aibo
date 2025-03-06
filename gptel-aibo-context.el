@@ -80,7 +80,7 @@ will be discarded."
   (with-current-buffer (or buffer (current-buffer))
     (let* ((active-buffer-size (- (point-max) (point-min))))
       (concat
-       (format "Current working buffer: `%s`\n\n" (buffer-name))
+       (format "Current working buffer: `%s`\n" (buffer-name))
        (if (<= active-buffer-size gptel-aibo-max-buffer-size)
            (gptel-aibo--buffer-info)
          (gptel-aibo--buffer-filename-info))
@@ -147,6 +147,85 @@ BUFFER is the buffer to check, or the current buffer if nil."
           (if-let ((file-name (buffer-file-name buffer)))
               (concat "`" file-name "`")
             "(not associated with a file)")))
+
+(defun gptel-aibo-summon-context-info (&optional buffer)
+  "Get context information for BUFFER."
+  (concat (gptel-aibo--summon-buffer-info buffer)
+          "\n"
+          (gptel-aibo--project-buffers-info buffer)))
+
+(defun gptel-aibo--summon-buffer-info (&optional buffer)
+  "Get context information about BUFFER for summon."
+  (with-current-buffer (or buffer (current-buffer))
+    (let* ((active-buffer-size (- (point-max) (point-min))))
+      (concat
+       (format "Current working buffer: `%s`\n" (buffer-name))
+       (gptel-aibo--buffer-filename-info)
+       (cond
+        ((zerop active-buffer-size)
+         "Content: (empty)")
+        ((<= active-buffer-size gptel-aibo-max-buffer-size)
+         (gptel-aibo--cursoring-buffer-info))
+        (t
+         (gptel-aibo--cursoring-fragment-info)))))))
+
+(defvar gptel-aibo--cursor-notes
+  "
+
+The marker `{{CURSOR}}` serves only as a cursor position indicator and must not
+be treated as part of the actual content.
+
+")
+
+(defvar gptel-aibo--cursor-fragment-notes
+  "
+
+The marker `{{CURSOR}}` serves only as a cursor position indicator and must not
+be treated as part of the actual content.
+Note that this surrounding content is arbitrarily extracted to illustrate the
+cursor position; it is not based on semantic boundaries and does not represent a
+logical unit. The extracted snippet may be longer or shorter than a meaningful
+semantic boundary.
+
+")
+
+
+(defun gptel-aibo--cursoring-buffer-info (&optional buffer)
+  "Get buffer information including file path and content.
+
+When BUFFER is nil, use current buffer."
+  (with-current-buffer (or buffer (current-buffer))
+    (let* ((language-identifier
+            (gptel-aibo--mode-to-language-identifier major-mode))
+           (before-cursor
+            (buffer-substring-no-properties (point-min) (point)))
+           (after-cursor
+            (buffer-substring-no-properties (point) (point-max)))
+           (cursor-snippet (concat before-cursor "{{CURSOR}}" after-cursor)))
+      (concat "Content:\n"
+              (gptel-aibo--make-code-block
+               cursor-snippet
+               language-identifier)
+              gptel-aibo--cursor-notes))))
+
+(defun gptel-aibo--cursoring-fragment-info (&optional buffer)
+  "Get buffer information including file path and content.
+
+When BUFFER is nil, use current buffer."
+  (with-current-buffer (or buffer (current-buffer))
+    (let* ((language-identifier
+            (gptel-aibo--mode-to-language-identifier major-mode))
+           (before-cursor
+            (buffer-substring-no-properties (point-min) (point)))
+           (after-cursor
+            (buffer-substring-no-properties (point) (point-max)))
+           (cursor-snippet (concat before-cursor "{{CURSOR}}" after-cursor)))
+      (concat (gptel-aibo--buffer-filename-info)
+              "Content:\n"
+              (gptel-aibo--make-code-block
+               cursor-snippet
+               language-identifier)
+              gptel-aibo--cursor-fragment-notes))))
 
 (defun gptel-aibo--buffer-supports-imenu-p (&optional buffer)
   "Return non-nil if BUFFER supports imenu indexing.

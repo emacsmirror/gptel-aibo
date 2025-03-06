@@ -49,11 +49,12 @@ CALLBACK receives either a list of diffs or ''error with a message."
 
         (let ((process
                (start-process
-                "gptel-aibo-git-diff" "*gptel-aibo-git-diff*"
+                "gptel-aibo-git-diff"
+                (generate-new-buffer-name "*gptel-aibo-git-diff*")
                 "git" "--no-pager"
                 "diff" "-U10000" "--no-color" "--no-index"
                 "--word-diff=porcelain"
-                "--word-diff-regex=[A-Za-zàáâäçéèêëíïóôöúüñ]+|[0-9]+|[^A-Za-zàáâäçéèêëíïóôöúüñ0-9\\s]+"
+                "--word-diff-regex=[A-Za-zàáâäçéèêëíïóôöúüñ]+|[0-9]+|[^\\s]"
                 source-file replacement-file)))
           (process-put process 'source-file source-file)
           (process-put process 'replacement-file replacement-file)
@@ -127,35 +128,24 @@ If no BUFFER is provided, the current buffer is used."
                      diffs))
               ("~"
                (push (gptel-aibo-make-diff
-                      :type :matched
-                      :content "\n")
+                      :type :newline)
                      diffs))))
 
           (forward-line))
 
-        (when (and diffs
-                   (eq (gptel-aibo-diff-type (car diffs)) :matched)
-                   (string= (gptel-aibo-diff-content (car diffs)) "\n"))
+        (when (and diffs (eq (gptel-aibo-diff-type (car diffs)) :newline))
           (setq diffs (cdr diffs)))
 
-        (let ((merged-diffs '()))
-          (dolist (diff diffs)
-            (if (and merged-diffs
-                     (eq (gptel-aibo-diff-type (car merged-diffs))
-                         (gptel-aibo-diff-type diff)))
-                (setf (gptel-aibo-diff-content (car merged-diffs))
-                      (concat (gptel-aibo-diff-content diff)
-                              (gptel-aibo-diff-content (car merged-diffs))))
-              (push diff merged-diffs)))
-          merged-diffs)))))
+        (nreverse diffs)))))
 
-(defun gptel-aibo--inplace-show-diffs (start-point end-point diffs)
+(defun gptel-aibo--inplace-render-diffs (start-point end-point diffs)
   "Apply DIFFS to the region between START-POINT and END-POINT."
   (save-excursion
     (let ((total-overlay (make-overlay start-point start-point))
           (sub-ovs '()))
 
       (overlay-put total-overlay 'evaporate t)
+      (overlay-put total-overlay 'face 'gptel-aibo-diff-hunk-heading)
 
       ;; Delete the original content
       (delete-region start-point end-point)
@@ -168,15 +158,17 @@ If no BUFFER is provided, the current buffer is used."
               (start nil)
               (overlay nil))
           (pcase type
-            ;; Insert matched content with no overlay
             (:matched
              (insert content))
+            (:newline
+             (insert "\n"))
             (:removed
              (setq start (point))
              (insert content)
              (setq overlay (make-overlay start (point)))
              (overlay-put overlay 'face 'gptel-aibo-diff-removed)
              (overlay-put overlay 'evaporate t)
+             (overlay-put overlay 'aibo-diff diff)
              (push overlay sub-ovs))
             (:added
              (setq start (point))
@@ -184,10 +176,11 @@ If no BUFFER is provided, the current buffer is used."
              (setq overlay (make-overlay start (point)))
              (overlay-put overlay 'face 'gptel-aibo-diff-added)
              (overlay-put overlay 'evaporate t)
+             (overlay-put overlay 'aibo-diff diff)
              (push overlay sub-ovs)))))
 
       (move-overlay total-overlay start-point (point))
-      (overlay-put total-overlay 'sub-ovs sub-ovs)
+      (overlay-put total-overlay 'sub-ovs (reverse sub-ovs))
 
       total-overlay)))
 

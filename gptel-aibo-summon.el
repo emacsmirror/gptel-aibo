@@ -22,11 +22,91 @@
 
 ;;; Commentary:
 
+;;; Summon to your fingertips
+
 ;;; Code:
 
 (require 'gptel-aibo-action-parser)
 (require 'gptel-aibo-inplace-diff)
 (require 'gptel-aibo-face)
+
+(require 'gptel)
+(require 'gptel-context)
+
+(defvar gptel-aibo--summon-prompt
+  "**Your Task**:
+Provide content suitable for insertion at the cursor position to complete the
+unfinished statements. Use a SEARCH/REPLACE pair to apply the change.
+The format is as follows:
+
+*SEARCH*
+```language-id (OPTIONAL)
+{{Content around the cursor to be replaced}}
+```
+*REPLACE*
+```language-id (OPTIONAL)
+{{Content to replace with}}
+```
+
+Please replace the placeholder text inside the markers `{{` and `}}`, along with
+the markers themselves, with the actual content of the SEARCH or REPLACE.
+
+### Rules
+1. Only provide concrete, definitive content at the insertion point. Do not use a
+   template or outline, or mix with explanations.
+2. Do not modify other parts of the content. If the insertion leads to changes
+   that should be made to the next few lines, place those changes in the
+   \"Nearby Modification\" section, which will be introduced later.
+3. The SEARCH content should not include irrelevant content, as changes in
+   irrelevant content could make the SEARCH/REPLACE unidentifiable.
+4. If the context is unclear, provide only a minimal insertion that stands on its
+   own. For example, if the context suggests adding one or multiple items
+   (such as elements, statements, or other definitions) but the exact number cannot
+   be inferred, adding a single item is sufficient, and the possibly second one
+   can be placed in the \"Next Predicts\" section, which will be introduced later.
+
+### Nearby Modification
+After inserting the provided content, if the next few lines in the original
+content are very likely to require modification accordingly, you may also provide
+a SEARCH/REPLACE pair to modify them. Start Nearby Modification with the marker line
+```
+=Nearby Modification=
+```
+
+### Next Predicts
+After inserting the provided content, you may also optionally provide a
+Next Predicts section, still in a SEARCH/REPLACE pair format.
+
+**Key Difference With Nearby Modification**
+
+- Nearby Modification is for changes to the existing content that ensure consistency
+  or correctness after the insertion.
+- Next Predicts is about predicting what content will logically come next, based on
+  the structure of the document.
+
+Like the primary insertion, Next Predicts should provide concrete, definitive
+content rather than a template or outline.
+
+The SEARCH part of Next Predicts would often refer to the updated document
+structure after this insertion.
+
+For simplicity, do not provide Nearby Modification for Next Predicts.
+
+Start Next Predicts with the marker line
+```
+=Next Predicts=
+```
+
+### Final Notes
+1. Make decisions based solely on the information provided to you. Do not call
+   tools or ask questions to obtain additional information.
+2. If there’s no applicable content to provide, return an empty string as the
+   entire result.
+
+
+")
+
+(defvar gptel-aibo--system-role)
 
 ;;;###autoload
 (defun gptel-aibo-summon ()
@@ -34,24 +114,38 @@
 This function initiates an asynchronous completion request using
 the current buffer's content and position."
   (interactive)
-  (run-at-time 0 nil #'gptel-aibo--summon-on-response
-               (current-buffer)
-               (point)
-               "
+  (let ((gptel--system-message gptel-aibo--system-role)
+        (prompt (concat "Request context:\n\n"
+                        (gptel-aibo-summon-context-info)
+                        gptel-aibo--summon-prompt)))
+    (message "Requesting LLM suggestions...")
+    ;; (message prompt)
+    (gptel-request prompt
+      :position (point)
+      :callback #'gptel-aibo--summon-callback)))
+
+(defun gptel-aibo-fake-summon ()
+  "Fake summon."
+  (interactive)
+  (let ((response "
 *SEARCH*
 ```
+set(SPDLOG_FMT_EXTERNAL ON)
 FetchContent_Declare()
+
+FetchContent_MakeAvailable(fmt absl)
 ```
 *REPLACE*
 ```
+set(SPDLOG_FMT_EXTERNAL ON)
 FetchContent_Declare(
-    spdlog
-    GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG        master
+  hello
 )
+
+FetchContent_MakeAvailable(fmt absl)
 ```
 
-### Nearby Modification
+=Nearby Modification=
 
 *SEARCH*
 ```
@@ -62,7 +156,43 @@ FetchContent_MakeAvailable(fmt absl)
 ```
 FetchContent_MakeAvailable(fmt absl spdlog)
 ```
+
+=Next Predicts=
+
+*SEARCH*
+```
+add_executable(tt main.cc)
+```
+
+*REPLACE*
+```
+add_executable(tt main.cc)
+target_link_libraries(tt PRIVATE fmt absl::absl spdlog)
+```
+
 "))
+    (run-at-time 0 nil #'gptel-aibo--summon-on-response
+                 (current-buffer) (point) response)))
+
+
+(defun gptel-aibo--summon-callback (response info)
+  "Insert the LLM RESPONSE into the calling buffer.
+
+INFO is a plist containing information relevant to this buffer.
+See `gptel--url-get-response' for details."
+  ;; (message "Response: [%s]" response)
+  (cond
+   ((stringp response)
+    (message "LLM response received")
+    (let ((marker (plist-get info :position)))
+      (with-current-buffer (marker-buffer marker)
+        (when (= (point) (marker-position marker))
+          (save-excursion
+            (gptel-aibo--summon-on-response
+             (current-buffer) (point) response))))))
+   (t
+    (message "The LLM responds with errors: %s"
+             (plist-get info :status)))))
 
 (defun gptel-aibo--summon-on-response (buffer point response)
   "Parse RESPONSE and apply modifcations on BUFFER at POINT."
@@ -71,9 +201,19 @@ FetchContent_MakeAvailable(fmt absl spdlog)
       (if (eq (car parse-result) 'error)
           (message "LLM responds with format error: %s" (cadr parse-result))
         (let ((insertion (car parse-result))
-              (nearby-modification (cadr parse-result)))
-          (gptel-aibo--summon-apply buffer point insertion
-                                    nearby-modification))))))
+              (nearby-modification (cadr parse-result))
+              (next-predicts (nth 2 parse-result)))
+          (unless (equal (car insertion) (cdr insertion))
+            (when (and nearby-modification
+                       (equal (car nearby-modification) (cdr nearby-modification)))
+              (setq nearby-modification nil))
+            (when (and next-predicts
+                       (equal (car next-predicts) (cdr next-predicts)))
+              (setq next-predicts nil))
+            (gptel-aibo--summon-apply
+             buffer point insertion
+             nearby-modification
+             next-predicts)))))))
 
 (defun gptel-aibo--summon-parse-response (response)
   "Parse GPT response into insertion and nearby modification.
@@ -84,10 +224,11 @@ two elements: (INSERTION NEARBY-MODIFICATION), where:
 
 The response format should contain:
 1. A primary insertion block
-2. Optionally, a '### Nearby Modification' section with a search/replace pair"
+2. Optionally, a Nearby Modification section with a search/replace pair"
   (let ((lines (split-string response "\n"))
         (insertion nil)
-        (nearby-modification nil))
+        (nearby-modification nil)
+        (next-predicts nil))
     (catch 'parse-result
       (let ((insertion-parse-result (gptel-aibo--parse-search-replace-pair lines)))
         (when (null (car insertion-parse-result))
@@ -95,133 +236,296 @@ The response format should contain:
         (when (eq (car insertion-parse-result) 'error)
           (throw 'parse-result insertion-parse-result))
         (setq insertion (car insertion-parse-result))
+        (when (and insertion (string-match-p "{{CURSOR}}" (car insertion)))
+          (setf (car insertion) (replace-regexp-in-string
+                                 "{{CURSOR}}" "" (car insertion))))
         (setq lines (cdr insertion-parse-result))
 
         (while (and lines (string-blank-p (car lines)))
           (setq lines (cdr lines)))
 
-        (when (and lines (string= (car lines) "### Nearby Modification"))
+        (when (and lines (string= (car lines) "=Nearby Modification="))
           (let ((nearby-modification-parse-result
                  (gptel-aibo--parse-search-replace-pair (cdr lines))))
             (when (eq (car nearby-modification-parse-result) 'error)
               (throw 'parse-result (list insertion nil)))
-            (setq nearby-modification (car nearby-modification-parse-result))))
-        (list insertion nearby-modification)))))
+            (setq nearby-modification (car nearby-modification-parse-result))
+            (setq lines (cdr nearby-modification-parse-result))))
+
+        (while (and lines (string-blank-p (car lines)))
+          (setq lines (cdr lines)))
+
+        (when (and lines (string= (car lines) "=Next Predicts="))
+          (let ((next-predicts-parse-result
+                 (gptel-aibo--parse-search-replace-pair (cdr lines))))
+            (when (eq (car next-predicts-parse-result) 'error)
+              (throw 'parse-result (list insertion nearby-modification)))
+            (setq next-predicts (car next-predicts-parse-result))))
+
+        (list insertion nearby-modification next-predicts)))))
 
 (defun gptel-aibo--summon-apply
-    (buffer point insertion &optional nearby-modification)
-  "Insert INSERTION at POINT in BUFFER with highlight overlay.
+    (buffer point insertion &optional nearby-modification next-predicts)
+  "Apply INSERTION and NEARBY-MODIFICATION at POINT in BUFFER."
+  (let* ((insertion-diff-parts
+          (gptel-aibo--extract-diff-lines (car insertion) (cdr insertion)))
+         (insertion-diff-lines (car insertion-diff-parts))
+         (insertion-diff-offsets (cadr insertion-diff-parts))
+         (nearby-diff-parts
+          (when nearby-modification
+            (gptel-aibo--extract-diff-lines
+             (car nearby-modification) (cdr nearby-modification))))
+         (nearby-diff-lines
+          (when nearby-diff-parts (car nearby-diff-parts)))
+         (nearby-diff-offsets
+          (when nearby-diff-parts (cadr nearby-diff-parts)))
+         (insertion-diffs nil)
+         (nearby-modification-diffs nil)
+         (insertion-ready nil)
+         (modification-ready nil))
 
-If NEARBY-MODIFICATION is provided, it will be parsed asynchronously."
-  (if (and nearby-modification
-           (with-current-buffer buffer
-             (save-excursion
-               (goto-char point)
-               (search-forward (car nearby-modification) nil t))))
-      (let ((source (car nearby-modification))
-            (replacement (cdr nearby-modification)))
+    (cl-labels
+        ((maybe-apply-diffs ()
+           (when (and insertion-ready
+                      (or (not nearby-modification) modification-ready))
+             (gptel-aibo--summon-apply-with-diffs
+              buffer point
+              (list (car insertion)
+                    insertion-diff-offsets
+                    insertion-diff-lines
+                    insertion-diffs)
+              (when nearby-modification
+                (list (car nearby-modification)
+                      nearby-diff-offsets
+                      nearby-diff-lines
+                      nearby-modification-diffs))
+              next-predicts))))
+
+      (gptel-aibo--inplace-diff
+       (car insertion-diff-lines)
+       (cdr insertion-diff-lines)
+       (lambda (diffs)
+         (setq insertion-diffs diffs
+               insertion-ready t)
+         (maybe-apply-diffs)))
+
+      (when nearby-modification
         (gptel-aibo--inplace-diff
-         source
-         replacement
+         (car nearby-diff-lines)
+         (cdr nearby-diff-lines)
          (lambda (diffs)
-           (gptel-aibo--summon-apply-with-nearby-modification-diffs
-            buffer point insertion (cons nearby-modification diffs)))))
-    (gptel-aibo--summon-apply-with-nearby-modification-diffs
-     buffer point insertion nil)))
+           (setq nearby-modification-diffs diffs
+                 modification-ready t)
+           (maybe-apply-diffs)))))))
 
-(defun gptel-aibo--summon-apply-with-nearby-modification-diffs
-    (buffer point insertion nearby-modification-diffs)
-  "Insert INSERTION at POINT in BUFFER with completion overlay.
+(defun gptel-aibo--summon-apply-with-diffs
+    (buffer point insertion nearby-modification next-predicts)
+  "Apply INSERTION at POINT in BUFFER with completion overlay.
 
-If NEARBY-MODIFICATION-DIFFS is provided, it will be applied also."
-
+If NEARBY-MODIFICATION and/or NEXT-PREDICTS is provided, they will be applied
+also."
   (with-current-buffer buffer
-    (save-excursion
-      (catch 'apply-fail
-        (let* ((search-pattern (car insertion))
-               (replace-text (cdr insertion))
-               (search-len (length search-pattern))
-               (search-beg (max (point-min) (- point search-len)))
-               (search-end (min (point-max) (+ point search-len)))
-               (insert-beg nil)
-               (insert-end nil)
-               (insert-text nil))
-          (goto-char search-beg)
-          (unless (search-forward (car insertion) search-end t)
-            (throw 'apply-fail nil))
-          (let ((prefix
-                 (fill-common-string-prefix search-pattern replace-text))
-                (suffix
-                 (gptel-aibo--string-common-suffix search-pattern replace-text)))
-            (setq insert-beg (+ (match-beginning 0) (length prefix)))
-            (setq insert-end (- (match-end 0) (length suffix)))
-            (setq insert-text
-                  (substring replace-text (length prefix)
-                             (- (length replace-text) (length suffix)))))
+    (catch 'apply-fail
+      (unless (= (point) point)
+        (throw 'apply-fail nil))
+      (let* ((search (car insertion))
+             (insertion-diff-offsets (cadr insertion))
+             (insertion-diff-lines (nth 2 insertion))
+             (diffs (nth 3 insertion))
+             (search-len (length search))
+             (search-beg (max (point-min) (- point search-len)))
+             (search-end (min (point-max) (+ point search-len))))
+        (goto-char search-beg)
+        (unless (search-forward search search-end t)
+          (throw 'apply-fail nil))
 
-          (when insert-text
-            (unless (= insert-beg insert-end)
-              (delete-region insert-beg insert-end))
-            (goto-char insert-beg)
-            (insert insert-text)
-            (setq insert-end (point))
-            (let ((ins-ov (make-overlay insert-beg insert-end))
-                  (mod-ov nil)
-                  (keymap (make-sparse-keymap)))
-              (overlay-put ins-ov 'face 'gptel-aibo-diff-added)
-              (overlay-put ins-ov 'keymap keymap)
+        (let* ((insertion-diff-start (+ (match-beginning 0)
+                                        (car insertion-diff-offsets)))
+               (insertion-diff-end (- (match-end 0)
+                                      (cdr insertion-diff-offsets)))
+               (ins-ov (gptel-aibo--inplace-render-diffs
+                        insertion-diff-start insertion-diff-end diffs))
+               (sub-ovs (overlay-get ins-ov 'sub-ovs))
+               (mod-ov nil)
+               (keymap (make-sparse-keymap)))
 
-              (when nearby-modification-diffs
-                (let ((source (caar nearby-modification-diffs))
-                      (diffs (cdr nearby-modification-diffs)))
-                  (when (search-forward source nil t)
-                    (setq mod-ov
-                          (gptel-aibo--inplace-show-diffs
-                           (match-beginning 0) (match-end 0) diffs)))))
+          (when nearby-modification
+            (let ((search (car nearby-modification))
+                  (nearby-diff-offsets (cadr nearby-modification))
+                  (diffs (nth 3 nearby-modification)))
+              (goto-char point)
+              (when (search-forward search nil t)
+                (setq mod-ov
+                      (gptel-aibo--inplace-render-diffs
+                       (+ (match-beginning 0) (car nearby-diff-offsets))
+                       (- (match-end 0) (cdr nearby-diff-offsets))
+                       diffs)))))
 
-              (cl-loop
-               for key in '("TAB" "<tab>" "RET" "<return>")
-               do
-               (define-key
-                keymap (kbd key)
-                (lambda ()
-                  (interactive)
-                  (goto-char (overlay-end ins-ov))
-                  (delete-overlay ins-ov)
+          (overlay-put ins-ov 'keymap keymap)
 
-                  ;; Overlays will be deleted automatically after the region
-                  (when (and nearby-modification-diffs mod-ov)
-                    (save-excursion
-                      (let ((start (overlay-start mod-ov))
-                            (end (overlay-end mod-ov)))
-                        (delete-region start end)
-                        (goto-char start)
-                        (insert (cdar nearby-modification-diffs))))))))
+          (cl-loop
+           for key in '("RET" "<return>")
+           do
+           (define-key
+            keymap (kbd key)
+            (lambda ()
+              (interactive)
 
-              (define-key
-               keymap [t]
-               (lambda ()
-                 (interactive)
-                 (delete-overlay ins-ov)
-                 (delete-region insert-beg insert-end)
+              (when next-predicts
+                (let* ((next-predicts-diff-parts
+                        (gptel-aibo--extract-diff-lines (car next-predicts)
+                                                        (cdr next-predicts)))
+                       (next-predicts-diff-lines (car next-predicts-diff-parts))
+                       (next-predicts-diff-offsets (cadr next-predicts-diff-parts)))
+                  (gptel-aibo--inplace-diff
+                   (car next-predicts-diff-lines)
+                   (cdr next-predicts-diff-lines)
+                   (lambda (diffs)
+                     (gptel-aibo--summon-render-diffs
+                      (car next-predicts)
+                      next-predicts-diff-offsets
+                      next-predicts-diff-lines
+                      diffs)))))
 
-                 ;; Overlays will be deleted automatically after the region
-                 (when (and nearby-modification-diffs mod-ov)
-                   (save-excursion
-                     (let ((start (overlay-start mod-ov))
-                           (end (overlay-end mod-ov)))
-                       (delete-region start end)
-                       (goto-char start)
-                       (insert (caar nearby-modification-diffs)))))
+              (dolist (ov sub-ovs)
+                (let ((diff (overlay-get ov 'aibo-diff)))
+                  (if (eq (gptel-aibo-diff-type diff) :removed)
+                      (delete-region (overlay-start ov) (overlay-end ov))
+                    (delete-overlay ov))))
 
-                 (let ((cmd (key-binding (this-command-keys-vector))))
-                   (when cmd
-                     (call-interactively cmd))))))
+              (let ((end (overlay-end ins-ov)))
+                (delete-overlay ins-ov)
 
+                (when (and nearby-modification mod-ov)
+                  (let ((sub-ovs (overlay-get mod-ov 'sub-ovs)))
+                    (dolist (ov sub-ovs)
+                      (let ((diff (overlay-get ov 'aibo-diff)))
+                        (if (eq (gptel-aibo-diff-type diff) :removed)
+                            (delete-region (overlay-start ov) (overlay-end ov))
+                          (delete-overlay ov)))))
+                  (delete-overlay mod-ov))
 
+                (goto-char end)))))
 
-            ))))))
+          (define-key
+           keymap (kbd "<escape>")
+           (lambda ()
+             (interactive)
+             (let ((start (overlay-start ins-ov))
+                   (end (overlay-end ins-ov)))
+               (delete-region start end)
+               (goto-char start)
+               (insert (car insertion-diff-lines)))
 
+             (when (and nearby-modification mod-ov)
+               (save-excursion
+                 (let ((start (overlay-start mod-ov))
+                       (end (overlay-end mod-ov)))
+                   (delete-region start end)
+                   (goto-char start)
+                   (insert (car (nth 2 nearby-modification))))))
+
+             (goto-char point)))
+
+          (goto-char point))))))
+
+(defun gptel-aibo--summon-render-diffs
+    (search diff-offsets diff-lines diffs &optional search-beg search-end)
+  "Render DIFFS in-place with interactive keybindings.
+
+SEARCH is the text to find, DIFF-OFFSETS specifies match bounds,
+DIFF-LINES contains original content. Optional SEARCH-BEG/END
+limit search region. Creates overlays with RET/ESC bindings:
+RET applies changes, ESC reverts to original."
+  (when search-beg
+    (goto-char search-beg))
+  (when (search-forward search (or search-end (point-max)) t)
+    (let* ((ov (gptel-aibo--inplace-render-diffs
+                   (+ (match-beginning 0) (car diff-offsets))
+                   (- (match-end 0) (cdr diff-offsets))
+                   diffs))
+              (sub-ovs (overlay-get ov 'sub-ovs))
+              (keymap (make-sparse-keymap)))
+
+      (overlay-put ov 'keymap keymap)
+
+      (cl-loop
+       for key in '("RET" "<return>")
+       do
+       (define-key
+        keymap (kbd key)
+        (lambda ()
+          (interactive)
+          (let ((end (overlay-end ov)))
+            (dolist (ov sub-ovs)
+              (let ((diff (overlay-get ov 'aibo-diff)))
+                (if (eq (gptel-aibo-diff-type diff) :removed)
+                    (delete-region (overlay-start ov) (overlay-end ov))
+                  (delete-overlay ov))))
+            (delete-overlay ov)
+            (goto-char end)))))
+
+      (define-key
+       keymap (kbd "<escape>")
+       (lambda ()
+         (interactive)
+         (let ((start (overlay-start ov))
+               (end (overlay-end ov)))
+           (delete-region start end)
+           (goto-char start)
+           (insert (car diff-lines))
+           (goto-char start))))
+
+      (goto-char (overlay-start ov)))))
+
+(defun gptel-aibo--extract-diff-lines (str1 str2)
+  "Extract the differing lines between STR1 and STR2.
+
+Returning ''((str1-diff-part . str2-diff-part)
+             (str1-diff-start-offset . str1-diff-end-offset))."
+  (let* ((str1-lines (split-string str1 "\n"))
+         (str2-lines (split-string str2 "\n"))
+         (len-str1 (length str1-lines))
+         (len-str2 (length str2-lines))
+         (start 0)
+         (end-str1 len-str1)
+         (end-str2 len-str2))
+
+    (while (and (< start len-str1) (< start len-str2)
+                (string= (nth start str1-lines) (nth start str2-lines)))
+      (setq start (1+ start)))
+
+    (while (and (> end-str1 start) (> end-str2 start)
+                (string= (nth (1- end-str1) str1-lines)
+                         (nth (1- end-str2) str2-lines)))
+      (setq end-str1 (1- end-str1))
+      (setq end-str2 (1- end-str2)))
+
+    (let* ((str1-start-offset
+            (length (string-join (cl-subseq str1-lines 0 start) "\n")))
+           (str2-start-offset
+            (length (string-join (cl-subseq str2-lines 0 start) "\n")))
+           (str1-end-offset
+            (length (string-join (cl-subseq str1-lines end-str1) "\n")))
+           (str2-end-offset
+            (length (string-join (cl-subseq str2-lines end-str2) "\n"))))
+
+      (when (and (> start 0) (< start len-str1) (< start len-str2))
+        (setq str1-start-offset (1+ str1-start-offset))
+        (setq str2-start-offset (1+ str2-start-offset)))
+
+      (when (and (< end-str1 len-str1) (> end-str1 start) (> end-str2 start))
+        (setq str1-end-offset (1+ str1-end-offset))
+        (setq str2-end-offset (1+ str2-end-offset)))
+
+      (let* ((str1-diff-part (substring str1 str1-start-offset
+                                        (when (> str1-end-offset 0)
+                                          (- str1-end-offset))))
+             (str2-diff-part (substring str2 str2-start-offset
+                                        (when (> str2-end-offset 0)
+                                           (- str2-end-offset)))))
+        (list (cons str1-diff-part str2-diff-part)
+              (cons str1-start-offset str1-end-offset))))))
 
 (defun gptel-aibo--string-common-suffix (s1 s2)
   "Find the common suffix between two strings S1 and S2."
