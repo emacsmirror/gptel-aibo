@@ -428,13 +428,13 @@ Returns a new alist containing all unique keys."
                  #'gptel-aibo--auto-apply t))
 
   (if (save-excursion
-        (when (re-search-backward "[^[:space:]]" nil t)
+        (when (re-search-backward "\\S-" nil t)
           (forward-char)
           (let ((end (point))
                 (beg))
             (unless (text-property-search-backward 'gptel 'response)
               (goto-char (point-min)))
-            (re-search-forward "[^[:space:]]" nil t)
+            (re-search-forward "\\S-" nil t)
             (backward-char)
             (setq beg (point))
             (add-text-properties beg end `(gptaiu ,gptel-aibo--working-buffer)))
