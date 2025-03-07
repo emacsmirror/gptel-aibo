@@ -172,7 +172,7 @@ BUFFER is the buffer to check, or the current buffer if nil."
 (defvar gptel-aibo--cursor-notes
   "
 
-The marker `{{CURSOR}}` serves only as a cursor position indicator and must not
+The marker `%s` serves only as a cursor position indicator and must not
 be treated as part of the actual content.
 
 ")
@@ -180,7 +180,7 @@ be treated as part of the actual content.
 (defvar gptel-aibo--cursor-fragment-notes
   "
 
-The marker `{{CURSOR}}` serves only as a cursor position indicator and must not
+The marker `%s` serves only as a cursor position indicator and must not
 be treated as part of the actual content.
 Note that this surrounding content is arbitrarily extracted to illustrate the
 cursor position; it is not based on semantic boundaries and does not represent a
@@ -189,6 +189,21 @@ semantic boundary.
 
 ")
 
+
+(defun gptel-aibo--cursor-symbol (content)
+  "Return the first unused cursor symbol from a predefined list.
+CONTENT is the string to search for existing cursor symbols."
+  (let ((candidates '("{{CURSOR}}" "<<CURSOR>>" "[[CURSOR]]"
+                      "{{POINT}}" "<<POINT>>" "[[POINT]]"
+                      "{{CURSOR-IS-HERE}}" "<<CURSOR-IS-HERE>>"
+                      "[[CURSOR-IS-HERE]]"
+                      "{{POINT-IS-HERE}}" "<<POINT-IS-HERE>>"
+                      "[[POINT-IS-HERE]]")))
+    (catch 'found
+      (dolist (candidate candidates)
+        (unless (string-match-p (regexp-quote candidate) content)
+          (throw 'found candidate)))
+      nil)))
 
 (defun gptel-aibo--cursoring-buffer-info (&optional buffer)
   "Get buffer information including file path and content.
@@ -201,12 +216,22 @@ When BUFFER is nil, use current buffer."
             (buffer-substring-no-properties (point-min) (point)))
            (after-cursor
             (buffer-substring-no-properties (point) (point-max)))
-           (cursor-snippet (concat before-cursor "{{CURSOR}}" after-cursor)))
-      (concat "Content:\n"
-              (gptel-aibo--make-code-block
-               cursor-snippet
-               language-identifier)
-              gptel-aibo--cursor-notes))))
+           (cursor-symbol
+            (gptel-aibo--cursor-symbol
+             (buffer-substring-no-properties (point-min) (point-max)))))
+      (if cursor-symbol
+          (concat "Content:\n"
+                  (gptel-aibo--make-code-block
+                   (concat before-cursor cursor-symbol after-cursor)
+                   language-identifier)
+                  (format gptel-aibo--cursor-notes cursor-symbol))
+
+        (concat
+         "Content before the cursor:\n"
+         (gptel-aibo--make-code-block before-cursor)
+         "\n\n"
+         "Content after the cursor:\n"
+         (gptel-aibo--make-code-block after-cursor))))))
 
 (defun gptel-aibo--cursoring-fragment-info (&optional buffer)
   "Get buffer information including file path and content.
@@ -215,17 +240,27 @@ When BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
     (let* ((language-identifier
             (gptel-aibo--mode-to-language-identifier major-mode))
+           (fragment-boundaries
+            (gptel-aibo--max-fragment-boundaries gptel-aibo-max-buffer-size))
            (before-cursor
-            (buffer-substring-no-properties (point-min) (point)))
+            (buffer-substring-no-properties (car fragment-boundaries) (point)))
            (after-cursor
-            (buffer-substring-no-properties (point) (point-max)))
-           (cursor-snippet (concat before-cursor "{{CURSOR}}" after-cursor)))
-      (concat (gptel-aibo--buffer-filename-info)
-              "Content:\n"
-              (gptel-aibo--make-code-block
-               cursor-snippet
-               language-identifier)
-              gptel-aibo--cursor-fragment-notes))))
+            (buffer-substring-no-properties (point) (cdr fragment-boundaries)))
+           (cursor-symbol
+            (gptel-aibo--cursor-symbol
+             (buffer-substring-no-properties (point-min) (point-max)))))
+      (if cursor-symbol
+          (concat "Fragment around cursor:\n"
+                  (gptel-aibo--make-code-block
+                   (concat before-cursor cursor-symbol after-cursor)
+                   language-identifier)
+                  (format gptel-aibo--cursor-fragment-notes cursor-symbol))
+        (concat
+         "Fragment before the cursor:\n"
+         (gptel-aibo--make-code-block before-cursor)
+         "\n\n"
+         "Fragment after the cursor:\n"
+         (gptel-aibo--make-code-block after-cursor))))))
 
 (defun gptel-aibo--buffer-supports-imenu-p (&optional buffer)
   "Return non-nil if BUFFER supports imenu indexing.
@@ -407,6 +442,68 @@ POS is the position to center on, or the current point if nil."
                              expand-line-limit))
                 (setcdr boundary (line-end-position)))))
           boundary)))))
+
+
+(defun gptel-aibo--max-fragment (max-length)
+  "Extract the text fragment around the point.
+
+The total length is limited by MAX-LENGTH."
+  (let* ((boundaries
+          (gptel-aibo--max-fragment-boundaries max-length))
+         (start (car boundaries))
+         (end (cdr boundaries))
+         (before-text (buffer-substring-no-properties start (point)))
+         (after-text (buffer-substring-no-properties (point) end)))
+    (cons before-text after-text)))
+
+(defun gptel-aibo--max-fragment-boundaries (max-length &optional buffer pos)
+  "Find the largest contiguous defun block around POS within MAX-LENGTH chars.
+BUFFER is the buffer to use, or the current buffer if nil.
+POS is the position to center on, or the current point if nil."
+  (with-current-buffer (or buffer (current-buffer))
+    (save-excursion
+      (let* ((pos (or pos (point)))
+             (start pos)
+             (end pos))
+
+        ;; Step 1: Move to the end of the current defun
+        (end-of-defun)
+        (setq end (point))
+
+        ;; Step 2: Find the beginning of the current defun
+        (beginning-of-defun)
+        (setq start (point))
+
+        ;; Step 3: If `start` is beyond `pos`, it means `pos` was between defuns
+        (when (> start pos)
+          (beginning-of-defun)
+          (setq start (point)))
+
+        ;; Expand while within max-length
+        (while (and (< (- end start) max-length)
+                    (or (> start (point-min)) (< end (point-max))))
+          ;; Move to `start` and extend backwards
+          (goto-char start)
+          (beginning-of-defun)
+          (setq start (point))
+
+          ;; Move to `start` again and extend forwards
+          (end-of-defun)
+          (let ((new-end-pos (point)))
+            (if (> new-end-pos end)
+                (setq end new-end-pos)
+              ;; Otherwise, move to previous `end` and extend
+              (goto-char end)
+              (end-of-defun)
+              (setq end (point)))))
+
+      ;; Adjust boundaries if exceeding max-length
+      (if (<= (- end start) max-length)
+          (cons start end)
+        (let* ((half-limit (/ max-length 2))
+               (adjusted-start (max start (- pos half-limit)))
+               (adjusted-end (min end (+ adjusted-start max-length))))
+          (cons adjusted-start adjusted-end)))))))
 
 (defun gptel-aibo--unique-region-p (beg end)
   "Check if the text between BEG and END appears uniquely in the buffer.

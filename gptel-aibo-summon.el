@@ -197,7 +197,11 @@ See `gptel--url-get-response' for details."
 (defun gptel-aibo--summon-on-response (buffer point response)
   "Parse RESPONSE and apply modifcations on BUFFER at POINT."
   (unless (string-match-p "\\`[ \t\n\r]*\\'" response)
-    (let ((parse-result (gptel-aibo--summon-parse-response response)))
+    (let* ((cursor-symbol
+            (gptel-aibo--cursor-symbol
+             (buffer-substring-no-properties (point-min) (point-max))))
+           (parse-result
+            (gptel-aibo--summon-parse-response response cursor-symbol)))
       (if (eq (car parse-result) 'error)
           (message "LLM responds with format error: %s" (cadr parse-result))
         (let ((insertion (car parse-result))
@@ -215,7 +219,7 @@ See `gptel--url-get-response' for details."
              nearby-modification
              next-predicts)))))))
 
-(defun gptel-aibo--summon-parse-response (response)
+(defun gptel-aibo--summon-parse-response (response &optional cursor-symbol)
   "Parse GPT response into insertion and nearby modification.
 RESPONSE is the raw string response from GPT. Returns a list of
 two elements: (INSERTION NEARBY-MODIFICATION), where:
@@ -224,21 +228,26 @@ two elements: (INSERTION NEARBY-MODIFICATION), where:
 
 The response format should contain:
 1. A primary insertion block
-2. Optionally, a Nearby Modification section with a search/replace pair"
+2. Optionally, a Nearby Modification section with a search/replace pair.
+
+CURSOR-SYMBOL if provided, will be used to removed from the RESPONSE."
   (let ((lines (split-string response "\n"))
         (insertion nil)
         (nearby-modification nil)
         (next-predicts nil))
     (catch 'parse-result
-      (let ((insertion-parse-result (gptel-aibo--parse-search-replace-pair lines)))
+      (let ((insertion-parse-result
+             (gptel-aibo--parse-search-replace-pair lines)))
         (when (null (car insertion-parse-result))
           (throw 'parse-result (list 'error "No valid insertion.")))
         (when (eq (car insertion-parse-result) 'error)
           (throw 'parse-result insertion-parse-result))
         (setq insertion (car insertion-parse-result))
-        (when (and insertion (string-match-p "{{CURSOR}}" (car insertion)))
+        (when (and insertion cursor-symbol
+                   (string-match-p (regexp-quote cursor-symbol) (car insertion)))
           (setf (car insertion) (replace-regexp-in-string
-                                 "{{CURSOR}}" "" (car insertion))))
+                                 (regexp-quote cursor-symbol) ""
+                                 (car insertion))))
         (setq lines (cdr insertion-parse-result))
 
         (while (and lines (string-blank-p (car lines)))
@@ -355,13 +364,20 @@ also."
                   (diffs (nth 3 nearby-modification)))
               (goto-char point)
               (when (search-forward search nil t)
-                (setq mod-ov
-                      (gptel-aibo--inplace-render-diffs
-                       (+ (match-beginning 0) (car nearby-diff-offsets))
-                       (- (match-end 0) (cdr nearby-diff-offsets))
-                       diffs)))))
+                (let ((nearby-diff-start
+                       (+ (match-beginning 0) (car nearby-diff-offsets)))
+                      (nearby-diff-end
+                       (- (match-end 0) (cdr nearby-diff-offsets))))
+                  (when (>= nearby-diff-start insertion-diff-end)
+                    (setq mod-ov
+                          (gptel-aibo--inplace-render-diffs
+                           nearby-diff-start
+                           nearby-diff-end
+                           diffs)))))))
 
           (overlay-put ins-ov 'keymap keymap)
+          (when mod-ov
+            (overlay-put mod-ov 'keymap keymap))
 
           (cl-loop
            for key in '("RET" "<return>")
@@ -387,13 +403,13 @@ also."
                       next-predicts-diff-lines
                       diffs)))))
 
-              (dolist (ov sub-ovs)
-                (let ((diff (overlay-get ov 'aibo-diff)))
-                  (if (eq (gptel-aibo-diff-type diff) :removed)
-                      (delete-region (overlay-start ov) (overlay-end ov))
-                    (delete-overlay ov))))
-
               (let ((end (overlay-end ins-ov)))
+
+                (dolist (ov sub-ovs)
+                  (let ((diff (overlay-get ov 'aibo-diff)))
+                    (if (eq (gptel-aibo-diff-type diff) :removed)
+                        (delete-region (overlay-start ov) (overlay-end ov))
+                      (delete-overlay ov))))
                 (delete-overlay ins-ov)
 
                 (when (and nearby-modification mod-ov)
