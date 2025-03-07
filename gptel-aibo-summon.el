@@ -114,6 +114,17 @@ Start Next Predicts with the marker line
 This function initiates an asynchronous completion request using
 the current buffer's content and position."
   (interactive)
+  (when (and (bound-and-true-p evil-mode)
+             (fboundp 'evil-insert-state-p)
+             (fboundp 'evil-insert-state)
+             (not (evil-insert-state-p)))
+    (evil-insert-state))
+  (let ((bounds (bounds-of-thing-at-point 'word)))
+  (when bounds
+    (let ((start (car bounds))
+          (end (cdr bounds)))
+      (when (> (point) start)
+        (goto-char end)))))
   (let ((gptel--system-message gptel-aibo--system-role)
         (prompt (concat "Request context:\n\n"
                         (gptel-aibo-summon-context-info)
