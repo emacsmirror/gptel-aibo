@@ -80,7 +80,7 @@ will be discarded."
   (with-current-buffer (or buffer (current-buffer))
     (let* ((active-buffer-size (- (point-max) (point-min))))
       (concat
-       (format "Current working buffer: `%s`\n" (buffer-name))
+       (format "Current working buffer: `%s`\n\n" (buffer-name))
        (if (<= active-buffer-size gptel-aibo-max-buffer-size)
            (gptel-aibo--buffer-info)
          (gptel-aibo--buffer-filename-info))
