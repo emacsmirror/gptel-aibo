@@ -151,7 +151,7 @@ BUFFER is the buffer to check, or the current buffer if nil."
 (defun gptel-aibo-summon-context-info (&optional buffer)
   "Get context information for BUFFER."
   (concat (gptel-aibo--summon-buffer-info buffer)
-          "\n"
+          "\n\n"
           (gptel-aibo--project-buffers-info buffer)))
 
 (defun gptel-aibo--summon-buffer-info (&optional buffer)
@@ -170,30 +170,14 @@ BUFFER is the buffer to check, or the current buffer if nil."
          (gptel-aibo--cursoring-fragment-info)))))))
 
 (defvar gptel-aibo--cursor-notes
-  "
-
-The marker `%s` serves only as a cursor position indicator and must not
-be treated as part of the actual content.
-
-")
-
-(defvar gptel-aibo--cursor-fragment-notes
-  "
-
-The marker `%s` serves only as a cursor position indicator and must not
-be treated as part of the actual content.
-Note that this surrounding content is arbitrarily extracted to illustrate the
-cursor position; it is not based on semantic boundaries and does not represent a
-logical unit. The extracted snippet may be longer or shorter than a meaningful
-semantic boundary.
-
-")
-
+  "Note the marker `%s` serves only as a cursor position indicator and must not
+be treated as part of the actual content.")
 
 (defun gptel-aibo--cursor-symbol (content)
   "Return the first unused cursor symbol from a predefined list.
 CONTENT is the string to search for existing cursor symbols."
   (let ((candidates '("{{CURSOR}}" "<<CURSOR>>" "[[CURSOR]]"
+                      "{{<CURSOR>}}"
                       "{{POINT}}" "<<POINT>>" "[[POINT]]"
                       "{{CURSOR-IS-HERE}}" "<<CURSOR-IS-HERE>>"
                       "[[CURSOR-IS-HERE]]"
@@ -218,18 +202,24 @@ When BUFFER is nil, use current buffer."
             (buffer-substring-no-properties (point) (point-max)))
            (cursor-symbol
             (gptel-aibo--cursor-symbol
-             (buffer-substring-no-properties (point-min) (point-max)))))
-      (if cursor-symbol
+             (buffer-substring-no-properties (point-min) (point-max))))
+           (cursor-line
+            (buffer-substring-no-properties
+             (line-beginning-position) (line-end-position))))
+      (if (or cursor-symbol (gptel-aibo--cursor-line-distinct-p cursor-line))
           (concat "Content:\n"
                   (gptel-aibo--make-code-block
                    (concat before-cursor cursor-symbol after-cursor)
                    language-identifier)
-                  (format gptel-aibo--cursor-notes cursor-symbol))
+                  "\n\n"
+                  (if cursor-symbol
+                      (format gptel-aibo--cursor-notes cursor-symbol)
+                    (gptel-aibo--cursor-line-info)))
 
         (concat
          "Content before the cursor:\n"
          (gptel-aibo--make-code-block before-cursor)
-         "\n\n"
+         "\n"
          "Content after the cursor:\n"
          (gptel-aibo--make-code-block after-cursor))))))
 
@@ -248,19 +238,92 @@ When BUFFER is nil, use current buffer."
             (buffer-substring-no-properties (point) (cdr fragment-boundaries)))
            (cursor-symbol
             (gptel-aibo--cursor-symbol
-             (buffer-substring-no-properties (point-min) (point-max)))))
-      (if cursor-symbol
+             (buffer-substring-no-properties (point-min) (point-max))))
+           (cursor-line
+            (buffer-substring-no-properties
+             (line-beginning-position) (line-end-position))))
+      (if (or cursor-symbol (gptel-aibo--cursor-line-distinct-p cursor-line))
           (concat "Fragment around cursor:\n"
+                  (unless (= (car fragment-boundaries) 1)
+                    "<<< TRUNCATED >>>\n")
                   (gptel-aibo--make-code-block
                    (concat before-cursor cursor-symbol after-cursor)
                    language-identifier)
-                  (format gptel-aibo--cursor-fragment-notes cursor-symbol))
+                  (if (= (cdr fragment-boundaries) (1+ (buffer-size)))
+                      (if (= (car fragment-boundaries) 1)
+                          "\n\n"
+                        "\n<<< END OF CONTENT >>>\n\n")
+                    "\n<<< REMAINING OMITTED >>>\n\n")
+                  (if cursor-symbol
+                      (format gptel-aibo--cursor-notes cursor-symbol)
+                    (gptel-aibo--cursor-line-info)))
         (concat
          "Fragment before the cursor:\n"
+         (unless (= (car fragment-boundaries) 1)
+           "...\n")
          (gptel-aibo--make-code-block before-cursor)
          "\n\n"
          "Fragment after the cursor:\n"
-         (gptel-aibo--make-code-block after-cursor))))))
+         (gptel-aibo--make-code-block after-cursor)
+         (if (= (cdr fragment-boundaries) (1+ (buffer-size)))
+             "\n"
+           "\n...\n"))))))
+
+(defun gptel-aibo--cursor-line-distinct-p (cursor-line)
+  "Return t if CURSOR-LINE is distinct to indicate the cursor."
+  (let ((len (length cursor-line)))
+    (and (>= len 12)
+         (< len 120)
+         (gptel-aibo--cursor-line-unique-p cursor-line))))
+
+(defun gptel-aibo--cursor-line-unique-p (cursor-line)
+  "Return t if CURSOR-LINE appears only once in the buffer."
+  (let ((count 0))
+    (save-excursion
+      (goto-char (point-min))
+      (while (and (not (eobp)) (< count 2))
+        (let ((line (buffer-substring-no-properties
+                     (line-beginning-position) (line-end-position))))
+          (when (and line (string= line cursor-line))
+            (setq count (1+ count))))
+        (forward-line 1)))
+    (= count 1)))
+
+(defun gptel-aibo--cursor-line-info ()
+  "Return a string describing the cursor position and line content.
+The string includes the cursor line content and position information."
+  (let* ((cursor-line (buffer-substring-no-properties
+                       (line-beginning-position) (line-end-position)))
+         (line-block (gptel-aibo--make-code-block
+                      cursor-line
+                      (gptel-aibo--mode-to-language-identifier major-mode))))
+
+    (cond
+     ((= (point) (line-beginning-position))
+      (concat
+       "The cursor is at the beginning of line:\n"
+       line-block
+       "\n"))
+     ((= (point) (line-end-position))
+      (concat
+       "The cursor is at the end of line:\n"
+       line-block
+       "\n"))
+     (t
+      (let* ((before-cursor (buffer-substring-no-properties
+                             (line-beginning-position)
+                             (point)))
+             (after-cursor (buffer-substring-no-properties
+                            (point)
+                            (line-end-position)))
+             (before (if (> (length before-cursor) 20)
+                         (substring before-cursor -20)
+                       before-cursor))
+             (after (if (> (length after-cursor) 20)
+                        (substring after-cursor 0 20)
+                      after-cursor)))
+        (format "The cursor line: %s\nThe cursor is after `%s` before `%s`."
+                cursor-line before after))))))
 
 (defun gptel-aibo--buffer-supports-imenu-p (&optional buffer)
   "Return non-nil if BUFFER supports imenu indexing.
@@ -703,6 +766,7 @@ Returns: String containing the appropriate number of backticks"
             ("typescript-mode" . "typescript")
             ("c-mode" . "c")
             ("c++-mode" . "cpp")
+            ("rustic-mode" . "rust")
             ("java-mode" . "java")
             ("go-mode" . "go")
             ("rust-mode" . "rust")
