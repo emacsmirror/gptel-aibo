@@ -144,11 +144,10 @@ See `gptel--url-get-response' for details."
   (cond
    ((stringp response)
     (message "LLM response received")
-    (let ((marker (plist-get info :position)))
-      (with-current-buffer (marker-buffer marker)
-        (save-excursion
-          (gptel-aibo--summon-on-response
-           (current-buffer) (marker-position marker) response)))))
+    (let* ((marker (plist-get info :position))
+           (buffer (marker-buffer marker)))
+      (gptel-aibo--summon-on-response
+       buffer (marker-position marker) response)))
    (t
     (message "The LLM responds with errors: %s"
              (plist-get info :status)))))

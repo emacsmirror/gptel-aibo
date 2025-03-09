@@ -157,7 +157,7 @@ BUFFER is the buffer to check, or the current buffer if nil."
 (defun gptel-aibo--summon-buffer-info (&optional buffer)
   "Get context information about BUFFER for summon."
   (with-current-buffer (or buffer (current-buffer))
-    (let* ((active-buffer-size (- (point-max) (point-min))))
+    (let ((active-buffer-size (- (point-max) (point-min))))
       (concat
        (format "Current working buffer: `%s`\n" (buffer-name))
        (gptel-aibo--buffer-filename-info)
@@ -168,6 +168,15 @@ BUFFER is the buffer to check, or the current buffer if nil."
          (gptel-aibo--cursoring-buffer-info))
         (t
          (gptel-aibo--cursoring-fragment-info)))))))
+
+(defconst gptel-aibo--truncated-marker "<<< TRUNCATED >>>"
+  "Marker indicating that preceding content has been omitted.")
+
+(defconst gptel-aibo--omitted-marker "<<< REMAINING OMITTED >>>"
+  "Marker indicating that subsequent content has been omitted.")
+
+(defconst gptel-aibo--end-marker "<<< END OF CONTENT >>>"
+  "Marker indicating the definitive end of the content.")
 
 (defvar gptel-aibo--cursor-notes
   "Note the marker `%s` serves only as a cursor position indicator and must not
@@ -189,39 +198,69 @@ CONTENT is the string to search for existing cursor symbols."
           (throw 'found candidate)))
       nil)))
 
+(defun gptel-aibo--cursor-at-word-boundary-p ()
+  "Return t if the cursor is at a word boundary."
+  (let ((bounds (bounds-of-thing-at-point 'word)))
+    (or (not bounds)
+        (= (point) (car bounds))
+        (= (point) (cdr bounds)))))
+
 (defun gptel-aibo--cursoring-buffer-info (&optional buffer)
   "Get buffer information including file path and content.
 
 When BUFFER is nil, use current buffer."
   (with-current-buffer (or buffer (current-buffer))
-    (let* ((language-identifier
-            (gptel-aibo--mode-to-language-identifier major-mode))
-           (before-cursor
-            (buffer-substring-no-properties (point-min) (point)))
-           (after-cursor
-            (buffer-substring-no-properties (point) (point-max)))
-           (cursor-symbol
-            (gptel-aibo--cursor-symbol
-             (buffer-substring-no-properties (point-min) (point-max))))
-           (cursor-line
-            (buffer-substring-no-properties
-             (line-beginning-position) (line-end-position))))
-      (if (or cursor-symbol (gptel-aibo--cursor-line-distinct-p cursor-line))
+    (let ((language-identifier
+           (gptel-aibo--mode-to-language-identifier major-mode))
+          (cursor-symbol
+           (when (gptel-aibo--cursor-at-word-boundary-p)
+             (gptel-aibo--cursor-symbol
+              (buffer-substring-no-properties (point-min) (point-max)))))
+          (cursor-line
+           (buffer-substring-no-properties
+            (line-beginning-position) (line-end-position))))
+      (cond
+       (cursor-symbol
+        (let ((before-cursor
+               (buffer-substring-no-properties (point-min) (point)))
+              (after-cursor
+               (buffer-substring-no-properties (point) (point-max))))
           (concat "Content:\n"
                   (gptel-aibo--make-code-block
                    (concat before-cursor cursor-symbol after-cursor)
                    language-identifier)
                   "\n\n"
-                  (if cursor-symbol
-                      (format gptel-aibo--cursor-notes cursor-symbol)
-                    (gptel-aibo--cursor-line-info)))
-
-        (concat
-         "Content before the cursor:\n"
-         (gptel-aibo--make-code-block before-cursor)
-         "\n"
-         "Content after the cursor:\n"
-         (gptel-aibo--make-code-block after-cursor))))))
+                  (format gptel-aibo--cursor-notes cursor-symbol))))
+       ((bobp)
+        (concat "Content:\n"
+                (gptel-aibo--make-code-block
+                 (buffer-substring-no-properties (point-min) (point-max))
+                 language-identifier)
+                "\nThe cursor is positioned at the beginning of the buffer."))
+       ((eobp)
+        (concat "Content:\n"
+                (gptel-aibo--make-code-block
+                 (buffer-substring-no-properties (point-min) (point-max))
+                 language-identifier)
+                "\nThe cursor is positioned at the end of the buffer."))
+       ((gptel-aibo--cursor-line-distinct-p cursor-line)
+        (concat "Content:\n"
+                (gptel-aibo--make-code-block
+                 (buffer-substring-no-properties (point-min) (point-max))
+                 language-identifier)
+                "\n\n"
+                (gptel-aibo--cursor-line-info)))
+       (t
+        (let ((before-cursor
+               (buffer-substring-no-properties (point-min) (point)))
+              (after-cursor
+               (buffer-substring-no-properties (point) (point-max))))
+          (concat
+           "Content before the cursor:\n"
+           (gptel-aibo--make-code-block before-cursor)
+           "\n"
+           "Content after the cursor:\n"
+           (gptel-aibo--make-code-block after-cursor))))))))
 
 (defun gptel-aibo--cursoring-fragment-info (&optional buffer)
   "Get buffer information including file path and content.
@@ -232,49 +271,87 @@ When BUFFER is nil, use current buffer."
             (gptel-aibo--mode-to-language-identifier major-mode))
            (fragment-boundaries
             (gptel-aibo--max-fragment-boundaries gptel-aibo-max-buffer-size))
-           (before-cursor
-            (buffer-substring-no-properties (car fragment-boundaries) (point)))
-           (after-cursor
-            (buffer-substring-no-properties (point) (cdr fragment-boundaries)))
            (cursor-symbol
+            (when (gptel-aibo--cursor-at-word-boundary-p)
             (gptel-aibo--cursor-symbol
-             (buffer-substring-no-properties (point-min) (point-max))))
+             (buffer-substring-no-properties (point-min) (point-max)))))
+           (truncate-info
+            (when (> (car fragment-boundaries) (point-min))
+              (concat gptel-aibo--truncated-marker "\n")))
+           (remain-info
+            (if (< (cdr fragment-boundaries) (point-max))
+                (concat gptel-aibo--omitted-marker "\n")
+              (when (> (car fragment-boundaries) (point-min))
+                (concat gptel-aibo--end-marker "\n"))))
            (cursor-line
             (buffer-substring-no-properties
              (line-beginning-position) (line-end-position))))
-      (if (or cursor-symbol (gptel-aibo--cursor-line-distinct-p cursor-line))
+      (cond
+       (cursor-symbol
+        (let ((before-cursor
+               (buffer-substring-no-properties (car fragment-boundaries) (point)))
+              (after-cursor
+               (buffer-substring-no-properties (point) (cdr fragment-boundaries))))
           (concat "Fragment around cursor:\n"
-                  (unless (= (car fragment-boundaries) 1)
-                    "<<< TRUNCATED >>>\n")
+                  truncate-info
                   (gptel-aibo--make-code-block
                    (concat before-cursor cursor-symbol after-cursor)
                    language-identifier)
-                  (if (= (cdr fragment-boundaries) (1+ (buffer-size)))
-                      (if (= (car fragment-boundaries) 1)
-                          "\n\n"
-                        "\n<<< END OF CONTENT >>>\n\n")
-                    "\n<<< REMAINING OMITTED >>>\n\n")
-                  (if cursor-symbol
-                      (format gptel-aibo--cursor-notes cursor-symbol)
-                    (gptel-aibo--cursor-line-info)))
-        (concat
-         "Fragment before the cursor:\n"
-         (unless (= (car fragment-boundaries) 1)
-           "...\n")
-         (gptel-aibo--make-code-block before-cursor)
-         "\n\n"
-         "Fragment after the cursor:\n"
-         (gptel-aibo--make-code-block after-cursor)
-         (if (= (cdr fragment-boundaries) (1+ (buffer-size)))
-             "\n"
-           "\n...\n"))))))
+                  "\n"
+                  remain-info
+                  "\n"
+                  (format gptel-aibo--cursor-notes cursor-symbol))))
+       ((= (point) (car fragment-boundaries))
+        (concat "Fragment around cursor:\n"
+                truncate-info
+                (gptel-aibo--make-code-block
+                 (buffer-substring-no-properties (car fragment-boundaries)
+                                                 (cdr fragment-boundaries))
+                 language-identifier)
+                "\n"
+                remain-info
+                "The cursor is at the beginning of the fragment.\n"))
+       ((= (point) (cdr fragment-boundaries))
+        (concat "Fragment around cursor:\n"
+                truncate-info
+                (gptel-aibo--make-code-block
+                 (buffer-substring-no-properties (car fragment-boundaries)
+                                                 (cdr fragment-boundaries))
+                 language-identifier)
+                "\n"
+                remain-info
+                "The cursor is at the end of the fragment.\n"))
+       ((gptel-aibo--cursor-line-distinct-p cursor-line)
+        (concat "Fragment around cursor:\n"
+                truncate-info
+                (gptel-aibo--make-code-block
+                 (buffer-substring-no-properties (car fragment-boundaries)
+                                                 (cdr fragment-boundaries))
+                 language-identifier)
+                "\n"
+                remain-info
+                "\n"
+                (gptel-aibo--cursor-line-info)))
+       (t
+        (let (
+              (before-cursor
+               (buffer-substring-no-properties (car fragment-boundaries) (point)))
+              (after-cursor
+               (buffer-substring-no-properties (point) (cdr fragment-boundaries))))
+          (concat
+           "Fragment before the cursor:\n"
+           truncate-info
+           (gptel-aibo--make-code-block before-cursor)
+           "\n\n"
+           "Fragment after the cursor:\n"
+           (gptel-aibo--make-code-block after-cursor)
+           remain-info)))))))
 
 (defun gptel-aibo--cursor-line-distinct-p (cursor-line)
   "Return t if CURSOR-LINE is distinct to indicate the cursor."
-  (let ((len (length cursor-line)))
-    (and (>= len 12)
-         (< len 120)
-         (gptel-aibo--cursor-line-unique-p cursor-line))))
+  (and (>= (length cursor-line) 12)
+       (< (length cursor-line) 120)
+       (gptel-aibo--cursor-line-unique-p cursor-line)))
 
 (defun gptel-aibo--cursor-line-unique-p (cursor-line)
   "Return t if CURSOR-LINE appears only once in the buffer."
@@ -322,8 +399,13 @@ The string includes the cursor line content and position information."
              (after (if (> (length after-cursor) 20)
                         (substring after-cursor 0 20)
                       after-cursor)))
-        (format "The cursor line: %s\nThe cursor is after `%s` before `%s`."
-                cursor-line before after))))))
+        (format "Cursor line:
+%s
+Cursor position:
+The cursor is after %s before %s."
+                line-block
+                (gptel-aibo--make-inline-code-block before)
+                (gptel-aibo--make-inline-code-block after)))))))
 
 (defun gptel-aibo--buffer-supports-imenu-p (&optional buffer)
   "Return non-nil if BUFFER supports imenu indexing.
@@ -579,92 +661,6 @@ END is the ending position of the region."
       (when (search-forward region-text nil t)
         (eq (match-beginning 0) beg)))))
 
-(defun gptel-aibo--fragment-before-cursor ()
-  "Get a meaningful fragment of text before the cursor.
-
-The function collects text starting from the cursor position and continues
-collecting lines backwards until one of the following conditions is met:
-1. Reaches the beginning of buffer
-2. Finds 3 non-blank lines that form a unique prefix in the buffer
-3. The collected text forms a unique pattern in the buffer
-
-Returns a string containing the collected text fragment."
-  (let ((point-pos (point))
-        (stop nil)
-        (prefix)
-        (non-blank-line-count 0))
-    (let ((line (buffer-substring-no-properties
-                 (line-beginning-position)
-                 point-pos)))
-      (setq prefix line)
-      (unless (string-match-p "\\`[[:space:]]*\\'" line)
-        (setq non-blank-line-count (1+ non-blank-line-count))))
-    (save-excursion
-      (while (not stop)
-        (if (bobp)
-            (setq stop t)
-          (progn
-            (forward-line -1)
-            (setq prefix (buffer-substring-no-properties (point) point-pos))
-            (let ((line (buffer-substring-no-properties
-                         (line-beginning-position) (line-end-position))))
-              (unless (string-match-p "\\`[[:space:]]*\\'" line)
-                (setq non-blank-line-count (1+ non-blank-line-count))
-                (if (and (>= non-blank-line-count 3)
-                         (save-excursion
-                           (goto-char (point-min))
-                           (let ((count 0))
-                             (while (and (< count 2)
-                                         (search-forward prefix nil t))
-                               (setq count (1+ count)))
-                             (= count 1))))
-                    (setq stop t))))))))
-    prefix))
-
-(defun gptel-aibo--fragment-after-cursor ()
-  "Get a meaningful fragment of text after the cursor.
-
-The function collects text starting from the cursor position and continues
-collecting lines until one of the following conditions is met:
-1. Reaches the end of buffer
-2. Finds 3 non-blank lines that form a unique prefix in the buffer
-3. The collected text forms a unique pattern in the buffer
-
-Returns a string containing the collected text fragment."
-  (let ((point-pos (point))
-        (stop nil)
-        (suffix)
-        (non-blank-line-count 0))
-    (let ((line (buffer-substring-no-properties
-                 point-pos
-                 (line-end-position))))
-      (setq suffix line)
-      (unless (string-match-p "\\`[[:space:]]*\\'" line)
-        (setq non-blank-line-count (1+ non-blank-line-count))))
-    (save-excursion
-      (while (not stop)
-        (if (eobp)
-            (setq stop t)
-          (progn
-            (forward-line 1)
-            (setq suffix
-                  (buffer-substring-no-properties
-                   point-pos (line-end-position)))
-            (let ((line (buffer-substring-no-properties
-                         (line-beginning-position) (line-end-position))))
-              (unless (string-match-p "\\`[[:space:]]*\\'" line)
-                (setq non-blank-line-count (1+ non-blank-line-count))
-                (if (and (>= non-blank-line-count 3)
-                         (save-excursion
-                           (goto-char (point-min))
-                           (let ((count 0))
-                             (while (and (< count 2)
-                                         (search-forward suffix nil t))
-                               (setq count (1+ count)))
-                             (= count 1))))
-                    (setq stop t))))))))
-    suffix))
-
 (defun gptel-aibo--project-current-directory-info ()
   "Return current directory listing as a string if in a project.
 If not in a project, return empty string.
@@ -751,6 +747,30 @@ Returns: String containing the appropriate number of backticks"
                                (- (match-end 0) (match-beginning 0))))
       (setq start (match-end 0)))
     (make-string (max 3 (1+ max-backticks)) ?`)))
+
+(defun gptel-aibo--make-inline-code-block (content)
+  "Generate an inline code fence string to safely encapsulate CONTENT.
+The fence length is determined by:
+1. The longest sequence of consecutive backticks in CONTENT.
+2. Always at least one backtick longer than the longest sequence.
+3. If CONTENT contains backticks, add a space inside the fence.
+4. Returns the generated inline code string in the format:
+   `N CONTENT N`, where N is the determined backtick length.
+
+CONTENT: String to be wrapped in inline code fence.
+Returns: Properly fenced inline code string."
+  (let ((max-backticks 0)
+        (start 0))
+    (while (string-match "`+" content start)
+      (setq max-backticks (max max-backticks
+                               (- (match-end 0) (match-beginning 0))))
+      (setq start (match-end 0)))
+    (let* ((fence (make-string (1+ max-backticks) ?`))
+           (needs-space (string-match "`" content))
+           (wrapped-content (if needs-space
+                                (concat " " content " ")
+                              content)))
+      (concat fence wrapped-content fence))))
 
 (defun gptel-aibo--mode-to-language-identifier (mode)
   "Convert MODE to code block language identifier."
