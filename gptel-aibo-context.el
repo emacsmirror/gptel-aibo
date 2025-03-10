@@ -179,8 +179,8 @@ BUFFER is the buffer to check, or the current buffer if nil."
   "Marker indicating the definitive end of the content.")
 
 (defvar gptel-aibo--cursor-notes
-  "Note the marker `%s` serves only as a cursor position indicator and must not
-be treated as part of the actual content.")
+  "Note the marker `%s` serves only as a cursor position indicator. It is not
+part of the actual content.")
 
 (defun gptel-aibo--cursor-symbol (content)
   "Return the first unused cursor symbol from a predefined list.
