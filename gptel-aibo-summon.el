@@ -57,8 +57,9 @@ the markers themselves, with the actual content of the SEARCH or REPLACE.
 2. Do not modify other parts of the content. If the insertion leads to changes
    that should be made to the next few lines, place those changes in the
    \"Nearby Modification\" section, which will be introduced later.
-3. The SEARCH content should not include irrelevant content, as changes in
-   irrelevant content could make the SEARCH/REPLACE unidentifiable.
+3. SEARCH must include some surrounding text for accuracy but should not contain
+   irrelevant content. The cursor position alone is not sufficient, and excessive
+   context may make SEARCH/REPLACE unidentifiable.
 4. If the context is unclear, provide only a minimal insertion that stands on its
    own. For example, if the context suggests adding one or multiple items
    (such as elements, statements, or other definitions) but the exact number cannot
@@ -102,7 +103,6 @@ Start Next Predicts with the marker line
    tools or ask questions to obtain additional information.
 2. If there’s no applicable content to provide, return an empty string as the
    entire result.
-
 
 ")
 
