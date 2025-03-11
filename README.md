@@ -16,9 +16,10 @@ While you can chat with the LLM for complex tasks, when your context is clear
 enough, you can use the quick command `gptel-aibo-summon` to invoke the LLM to
 generate appropriate content right at your cursor position. If the newly
 inserted content has direct implications for the next few lines, the LLM will
-adjust them accordingly. If you accept these inputs, the LLM can even predict
-what comes next. At any point, you can press Enter to accept suggestions or Esc
-to dismiss them.
+adjust them accordingly. All these changes will be displayed using an in-place
+diff format. If you accept these inputs, the LLM can even predict what comes
+next. At any point, you can press Enter to accept suggestions or Esc to dismiss
+them.
 
 The term *aibo*, meaning partner, is currently ambiguous—it could refer to
 gptel’s partner, or the user’s.
@@ -83,9 +84,10 @@ While you can chat with the LLM for complex tasks, when your context is clear
 enough, you can use the quick command `gptel-aibo-summon` to invoke the LLM to
 generate appropriate content right at your cursor position. If the newly
 inserted content has direct implications for the next few lines, the LLM will
-adjust them accordingly. If you accept these inputs, the LLM can even predict
-what comes next. At any point, you can press Enter to accept suggestions or Esc
-to dismiss them.
+adjust them accordingly. All these changes will be displayed using an in-place
+diff format. If you accept these inputs, the LLM can even predict what comes
+next. At any point, you can press Enter to accept suggestions or Esc to dismiss
+them.
 
 You can bind the command to a proper shortcut key, for example:
 - Doom Emacs
