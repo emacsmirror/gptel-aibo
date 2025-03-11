@@ -96,21 +96,12 @@ and the second is the associated file path."
                  (list 'transient default-directory))))
 
       (let* ((expect (format "Current working buffer: `%s`
-
 Filepath: `%s`
 Content:
 ```fundamental
 hello
 ```
-
-Fragment before the cursor:
-```
-hello
-```
-
-Fragment after the cursor:
-(cursor is at the end of the buffer)
-
+The cursor is positioned at the end of the buffer.
 
 Other buffers in the same project:
 
@@ -145,130 +136,77 @@ ok
   (with-temp-buffer
     (insert "hello")
     (let* ((expect (format "Current working buffer: `%s`
-
 Filepath: (not associated with a file)
 Content:
 ```fundamental
 hello
 ```
-
-Fragment before the cursor:
-```
-hello
-```
-
-Fragment after the cursor:
-(cursor is at the end of the buffer)
-
-" (buffer-name)))
+The cursor is positioned at the end of the buffer." (buffer-name)))
            (gptel-aibo-max-buffer-size 10240)
            (info (gptel-aibo--working-buffer-info)))
       (should (equal info expect)))
 
     (let* ((expect (format "Current working buffer: `%s`
-
 Filepath: (not associated with a file)
-
-Fragment before the cursor:
+Fragment around the cursor:
+<<< TRUNCATED >>>
+```fundamental
+o
 ```
-hello
-```
+<<< END OF CONTENT >>>
 
-Fragment after the cursor:
-(cursor is at the end of the buffer)
-
-" (buffer-name)))
+The cursor is positioned at the end of the fragment." (buffer-name)))
            (gptel-aibo-max-buffer-size 2)
            (info (gptel-aibo--working-buffer-info)))
       (should (equal info expect)))))
 
 (ert-deftest test-gptel-aibo--fragment-info ()
   (with-temp-buffer
-    (insert "hello")
-    (let* ((expect "Fragment before the cursor:
+    (insert "world")
+    (let* ((expect "Filepath: (not associated with a file)
+Fragment around the cursor:
+```fundamental
+world
 ```
-hello
-```
-
-Fragment after the cursor:
-(cursor is at the end of the buffer)
-
-")
+The cursor is positioned at the end of the fragment.")
            (gptel-aibo-max-buffer-size 10240)
-           (gptel-aibo-max-fragment-size 1024)
            (info (gptel-aibo--fragment-info)))
       (should (equal info expect)))
 
     (goto-char (point-min))
-    (let* ((expect "Fragment before the cursor:
-(cursor is at the beginning of the buffer)
-
-Fragment after the cursor:
+    (let* ((expect "Filepath: (not associated with a file)
+Fragment around the cursor:
+```fundamental
+world
 ```
-hello
-```
-
-")
+The cursor is positioned at the beginning of the fragment.")
            (gptel-aibo-max-buffer-size 10240)
-           (gptel-aibo-max-fragment-size 1024)
            (info (gptel-aibo--fragment-info)))
       (should (equal info expect)))
 
     (goto-char 3)
-    (let* ((expect "Fragment before the cursor:
+    (let* ((expect "Filepath: (not associated with a file)
+Fragment around the cursor:
+```fundamental
+world
 ```
-he
-```
-
-Fragment after the cursor:
-```
-llo
-```
-
-")
+The cursor is on the first line of the fragment, after `wo` and before `rld`.")
            (gptel-aibo-max-buffer-size 10240)
-           (gptel-aibo-max-fragment-size 2)
            (info (gptel-aibo--fragment-info)))
       (should (equal info expect)))
 
-    ;; Trimmed, but expanded
-    (let* ((expect "Fragment before the cursor:
+    (let* ((expect "Filepath: (not associated with a file)
+Fragment around the cursor:
+<<< TRUNCATED >>>
+```fundamental
+orl
 ```
-he
-```
+<<< REMAINING OMITTED >>>
 
-Fragment after the cursor:
-```
-llo
-```
-
-")
-           (gptel-aibo-max-buffer-size 10240)
-           (gptel-aibo-max-fragment-size 2)
-           (gptel-aibo-max-fragment-expand 1024)
+The cursor is on the first line of the fragment, after `o` and before `rl`.")
+           (gptel-aibo-max-buffer-size 3)
            (info (gptel-aibo--fragment-info)))
-      (should (equal info expect)))
-
-    ;; Trimmed
-    (let* ((expect "Fragment before the cursor:
-...
-```
-e
-```
-
-Fragment after the cursor:
-```
-l
-```
-...
-
-")
-           (gptel-aibo-max-buffer-size 10240)
-           (gptel-aibo-max-fragment-size 2)
-           (gptel-aibo-max-fragment-expand nil)
-           (info (gptel-aibo--fragment-info)))
-      (should (equal info expect)))
-    ))
+      (should (equal info expect)))))
 
 (ert-deftest test-gptel-aibo--project-buffers-info ()
   (with-temp-directory
@@ -379,153 +317,6 @@ hello
              (gptel-aibo-max-buffer-count 1)
              (info (gptel-aibo--project-buffers-info buf1)))
         (should (equal info expect)))))))
-
-(ert-deftest test-gptel-aibo--fragment ()
-  (with-temp-buffer
-    (insert "void f1() {
-// f1
-}
-
-void f2() {
-// f2
-}
-
-void f3() {
-// f3
-}
-")
-    (c-mode)
-
-    (goto-char (point-min))
-    (should (equal (gptel-aibo--fragment 1024)
-                   '(""
-                     .
-                     "void f1() {\n// f1\n}\n")))
-
-    (forward-line 5)
-    (should (equal (gptel-aibo--fragment 1024)
-                   '("void f2() {\n"
-                     .
-                     "// f2\n}\n")))
-
-    (goto-char (point-max))
-    (should (equal (gptel-aibo--fragment 1024)
-                   '("void f3() {\n// f3\n}\n"
-                     .
-                     "")))))
-
-(ert-deftest test-gptel-aibo--fragment-unique ()
-  (with-temp-buffer
-    (insert "class Dog {
-void hello() {
-
-}
-};
-
-class Cat {
-void hello() {
-
-}
-};
-
-void hello() {
-
-}
-")
-    (c++-mode)
-
-    (goto-char (point-min))
-
-    (forward-line 2)
-    (should (equal (gptel-aibo--fragment 1024)
-                   '("void hello() {\n"
-                     .
-                     "\n}\n")))
-
-    (forward-line 6)
-    (should (equal (gptel-aibo--fragment 1024)
-                   '("class Cat {\nvoid hello() {\n"
-                     .
-                     "\n}\n")))))
-
-
-(ert-deftest test-gptel-aibo--fragment-trimming-after ()
-  (with-temp-buffer
-    (let ((f1 "void f1() {  }\n")
-          (f2 "void f2() {
-//lines
-//lines
-//lines
-//lines
-}
-"))
-      (insert f1)
-      (insert f2)
-      (c++-mode)
-
-      (goto-char (point-min))
-      (forward-line 1)
-      (should (equal (gptel-aibo--fragment 1024)
-                     (cons f1 f2)))
-
-      ;; Before is small, trim after
-      (should (equal (gptel-aibo--fragment 25)
-                    (cons f1 "void f2() ")))
-
-      ;; Trim both
-      (should (equal (gptel-aibo--fragment 20)
-                    (cons "f1() {  }\n" "void f2() "))))))
-
-(ert-deftest test-gptel-aibo--fragment-trimming-before ()
-  (with-temp-buffer
-    (let ((f1 "void f1() {  }\n")
-          (f2 "void f2() {
-//lines
-//lines
-//lines
-//lines
-}
-"))
-      (insert f2)
-      (insert f1)
-      (c++-mode)
-
-      (goto-char (point-min))
-      (forward-line 6)
-      (should (equal (gptel-aibo--fragment 1024)
-                     (cons f2 f1)))
-
-      ;; After is small, trim before
-      (should (equal (gptel-aibo--fragment 25)
-                    (cons "//lines\n}\n" f1))))))
-
-(ert-deftest test-gptel-aibo--fragment-trimming-expand ()
-  (with-temp-buffer
-    (let ((f1 "void f1() {  }\n")
-          (f2 "void f2() {
-//lines
-//lines
-//lines
-//lines
-}
-"))
-      (insert f1)
-      (insert f2)
-      (c++-mode)
-
-      (goto-char (point-min))
-      (forward-line 1)
-      (should (equal (gptel-aibo--fragment 1024)
-                     (cons f1 f2)))
-
-      ;; Before is small, trim after, expand
-      (should (equal (gptel-aibo--fragment 25 20)
-                    (cons f1 "void f2() {")))
-
-      ;; Trim both, expand
-      (should (equal (gptel-aibo--fragment 20 20)
-                    (cons "void f1() {  }\n" "void f2() {"))))))
-
 
 (ert-deftest test-gptel-aibo--make-code-block ()
   (should (equal (gptel-aibo--make-code-block "aa`bb")
@@ -845,12 +636,12 @@ Line 5
       ;; 3. Cursor on the first line of the fragment but not at the beginning
       (goto-char (1+ start))
       (should (equal (gptel-aibo--cursor-position-info-in-fragment start end)
-                     (gptel-aibo--cursor-on-first-line-info-in-fragment)))
+                     (gptel-aibo--cursor-on-first-line-info-in-fragment start end)))
 
       ;; 4. Cursor on the last line of the fragment
       (goto-char (1- end))
       (should (equal (gptel-aibo--cursor-position-info-in-fragment start end)
-                     (gptel-aibo--cursor-on-last-line-info-in-fragment)))
+                     (gptel-aibo--cursor-on-last-line-info-in-fragment start end)))
 
       ;; 5. Cursor on a unique and long enough line
       (goto-char start)

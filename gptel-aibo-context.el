@@ -81,7 +81,7 @@ will be discarded."
 (defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."
   (concat (gptel-aibo--working-buffer-info buffer)
-          "\n"
+          "\n\n"
           (gptel-aibo--project-buffers-info buffer)))
 
 (defun gptel-aibo--working-buffer-info (&optional buffer)
@@ -121,7 +121,7 @@ will be discarded."
         language-identifier)
        "\n"
        remain-info
-       "\n"
+       (and remain-info "\n")
        (gptel-aibo--cursor-position-info-in-fragment
         (car fragment-boundaries) (cdr fragment-boundaries))))))
 
@@ -299,9 +299,9 @@ When BUFFER is nil, use current buffer."
    ((>= (point) end)
     "The cursor is positioned at the end of the fragment.")
    ((eq (line-number-at-pos) (line-number-at-pos start))
-    (gptel-aibo--cursor-on-first-line-info-in-fragment))
+    (gptel-aibo--cursor-on-first-line-info-in-fragment start end))
    ((eq (line-number-at-pos) (line-number-at-pos end))
-    (gptel-aibo--cursor-on-last-line-info-in-fragment))
+    (gptel-aibo--cursor-on-last-line-info-in-fragment start end))
    ((gptel-aibo--cursor-line-distinct-p)
     (gptel-aibo--cursor-line-info))
    (t
@@ -357,56 +357,63 @@ The string includes the cursor line content and position information."
               (gptel-aibo--make-inline-code-block before)
               (gptel-aibo--make-inline-code-block after))))))
 
-(defun gptel-aibo--cursor-on-first-line-info-in-fragment ()
+(defun gptel-aibo--cursor-on-first-line-info-in-fragment (start end)
   "Return a string describing the cursor position and line content.
 
-The string includes the cursor line content and position information."
-  (cond
-   ((= (point) (line-beginning-position))
-    "The cursor is positioned at the beginning of the first line of the fragment.")
-   ((= (point) (line-end-position))
-    "The cursor is positioned at the end of the first line of the fragment.")
-   (t
-    (let* ((before-cursor (buffer-substring-no-properties
-                           (line-beginning-position)
-                           (point)))
-           (after-cursor (buffer-substring-no-properties
-                          (point)
-                          (line-end-position)))
-           (before (if (> (length before-cursor) 20)
-                       (substring before-cursor -20)
-                     before-cursor))
-           (after (if (> (length after-cursor) 20)
-                      (substring after-cursor 0 20)
-                    after-cursor)))
-      (format "The cursor is on the first line of the fragment, after %s and before %s."
-              (gptel-aibo--make-inline-code-block before)
-              (gptel-aibo--make-inline-code-block after))))))
+The string includes the cursor line content and position information
+and restricted by START and END"
+  (let ((line-beginning (max (line-beginning-position) start))
+        (line-end (min (line-end-position) end)))
+    (cond
+     ((= (point) line-beginning)
+      "The cursor is positioned at the beginning of the first line of the fragment.")
+     ((= (point) line-end)
+      "The cursor is positioned at the end of the first line of the fragment.")
+     (t
+      (let* ((before-cursor (buffer-substring-no-properties
+                            line-beginning
+                             (point)))
+             (after-cursor (buffer-substring-no-properties
+                            (point)
+                            line-end))
+             (before (if (> (length before-cursor) 20)
+                         (substring before-cursor -20)
+                       before-cursor))
+             (after (if (> (length after-cursor) 20)
+                        (substring after-cursor 0 20)
+                      after-cursor)))
+        (format "The cursor is on the first line of the fragment, after %s and before %s."
+                (gptel-aibo--make-inline-code-block before)
+                (gptel-aibo--make-inline-code-block after)))))))
 
-(defun gptel-aibo--cursor-on-last-line-info-in-fragment ()
+(defun gptel-aibo--cursor-on-last-line-info-in-fragment (start end)
   "Return a string describing the cursor position and line content.
-The string includes the cursor line content and position information."
-  (cond
-   ((= (point) (line-beginning-position))
-    "The cursor is positioned at the beginning of the last line of the fragment.")
-   ((= (point) (line-end-position))
-    "The cursor is positioned at the end of the last line of the fragment.")
-   (t
-    (let* ((before-cursor (buffer-substring-no-properties
-                           (line-beginning-position)
-                           (point)))
-           (after-cursor (buffer-substring-no-properties
-                          (point)
-                          (line-end-position)))
-           (before (if (> (length before-cursor) 20)
-                       (substring before-cursor -20)
-                     before-cursor))
-           (after (if (> (length after-cursor) 20)
-                      (substring after-cursor 0 20)
-                    after-cursor)))
-      (format "The cursor is on the last line of the fragment, after %s and before %s."
-              (gptel-aibo--make-inline-code-block before)
-              (gptel-aibo--make-inline-code-block after))))))
+
+The string includes the cursor line content and position information
+and restricted by START and END."
+  (let ((line-beginning (max (line-beginning-position) start))
+        (line-end (min (line-end-position) end)))
+    (cond
+     ((= (point) line-beginning)
+      "The cursor is positioned at the beginning of the last line of the fragment.")
+     ((= (point) line-end)
+      "The cursor is positioned at the end of the last line of the fragment.")
+     (t
+      (let* ((before-cursor (buffer-substring-no-properties
+                             line-beginning
+                             (point)))
+             (after-cursor (buffer-substring-no-properties
+                            (point)
+                            line-end))
+             (before (if (> (length before-cursor) 20)
+                         (substring before-cursor -20)
+                       before-cursor))
+             (after (if (> (length after-cursor) 20)
+                        (substring after-cursor 0 20)
+                      after-cursor)))
+        (format "The cursor is on the last line of the fragment, after %s and before %s."
+                (gptel-aibo--make-inline-code-block before)
+                (gptel-aibo--make-inline-code-block after)))))))
 
 (defun gptel-aibo--cursor-line-info ()
   "Return a string describing the cursor position and line content.
