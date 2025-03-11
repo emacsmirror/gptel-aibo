@@ -164,7 +164,6 @@ BUFFER is the buffer to check, or the current buffer if nil."
     (let ((active-buffer-size (- (point-max) (point-min))))
       (concat
        (format "Current working buffer: `%s`\n" (buffer-name))
-       (gptel-aibo--buffer-filename-info)
        (cond
         ((zerop active-buffer-size)
          "Content: (empty)")
@@ -210,7 +209,8 @@ When BUFFER is nil, use current buffer."
                  (buffer-substring-no-properties (point-min) (point)))
                 (after-cursor
                  (buffer-substring-no-properties (point) (point-max))))
-            (concat "Content:\n"
+            (concat (gptel-aibo--buffer-filename-info)
+                    "Content:\n"
                     (gptel-aibo--make-code-block
                      (concat before-cursor cursor-symbol after-cursor)
                      language-identifier)
@@ -245,7 +245,8 @@ When BUFFER is nil, use current buffer."
                  (buffer-substring-no-properties (car fragment-boundaries) (point)))
                 (after-cursor
                  (buffer-substring-no-properties (point) (cdr fragment-boundaries))))
-            (concat "Fragment around cursor:\n"
+            (concat (gptel-aibo--buffer-filename-info)
+                    "Fragment around cursor:\n"
                     truncate-info
                     (gptel-aibo--make-code-block
                      (concat before-cursor cursor-symbol after-cursor)
