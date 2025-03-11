@@ -12,6 +12,14 @@ or "this file," etc. It also defines an action set and its format with the LLM,
 so once a response is received, you can easily apply the suggestions with a single
 command (`gptel-aibo-apply-last-suggestions`, bound to `C-c !`).
 
+While you can chat with the LLM for complex tasks, when your context is clear
+enough, you can use the quick command `gptel-aibo-summon` to invoke the LLM to
+generate appropriate content right at your cursor position. If the newly
+inserted content has direct implications for the next few lines, the LLM will
+adjust them accordingly. If you accept these inputs, the LLM can even predict
+what comes next. At any point, you can press Enter to accept suggestions or Esc
+to dismiss them.
+
 The term *aibo*, meaning partner, is currently ambiguous—it could refer to
 gptel’s partner, or the user’s.
 
@@ -49,6 +57,7 @@ Alternatively, define a different keybinding:
 ```
 
 ## Usage
+### `gptel-aibo`
 With the `gptel-aibo` interactive command, you can open or switch to an existing
 `gptel-aibo` console, which is a `markdown` page with the `gptel-aibo` minor
 mode enabled, an extension of `gptel-mode`.
@@ -67,27 +76,33 @@ There is also a custom variable, `gptel-aibo-auto-apply`. When set, gptel-aibo
 will automatically apply the LLM’s response to your project after receiving it.
 This makes gptel-aibo function like the aider’s no-auto-commits. Use it carefully!
 
-### Completion at point
-`gptel-aibo` also provides a minor mode `gptel-aibo-complete-mode` and an
-interactive command `gptel-aibo-complete-at-point`, which can insert relevant
-content at the current position based on the context. For example, after
-writing a function comment, you can use this single command to generate the
-corresponding code. Use TAB or Enter to accept, and other keys to discard.
+### `gptel-aibo-summon`
+Note: This command deprecates the old `gptel-aibo-complete-at-point`.
 
-You can globally enable `gptel-aibo-complete-mode`, which has no side effects
-and only works when you invoke it. You can also add it to specific mode hooks if
-that suits your workflow. In the minor mode, `gptel-aibo-complete-at-point` is
-bound to `C-c C-c i`. It’s a bit long, but less likely to upset someone by
-taking away their favorite key. You can also bind your own key, for example:
+While you can chat with the LLM for complex tasks, when your context is clear
+enough, you can use the quick command `gptel-aibo-summon` to invoke the LLM to
+generate appropriate content right at your cursor position. If the newly
+inserted content has direct implications for the next few lines, the LLM will
+adjust them accordingly. If you accept these inputs, the LLM can even predict
+what comes next. At any point, you can press Enter to accept suggestions or Esc
+to dismiss them.
+
+You can bind the command to a proper shortcut key, for example:
 - Doom Emacs
 ```elisp
 (use-package! gptel-aibo
-  :after (gptel)
+  :after (gptel flycheck)
   :config
-  (define-key gptel-aibo-complete-mode-map
-              (kbd "C-c i") #'gptel-aibo-complete-at-point)
-  (add-hook 'prog-mode-hook #'gptel-aibo-complete-mode))
+  (map! :map prog-mode-map "C-i" #'gptel-aibo-summon))
 ```
+- Vanilla Emacs
+```elisp
+(use-package gptel-aibo
+  :after (gptel flycheck)
+  :config
+  (define-key prog-mode-map (kbd "C-i") #'gptel-aibo-summon))
+```
+
 
 ## Samples
 ### Query the logic, request additional cases
@@ -105,7 +120,7 @@ tool calling.
 - generate a docstring for this function
 - make the comment conform to Doxygen style
 - generate the code for this function based on the comments (better done with
-`gptel-aibo-complete-at-point`)
+`gptel-aibo-summon`)
 - refactor this function and reorganize its logic
 - reformat this function, as some lines are too long
 - extract the common parts of functions A and B into a new function
