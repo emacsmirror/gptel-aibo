@@ -105,6 +105,13 @@ You can bind the command to a proper shortcut key, for example:
   (define-key prog-mode-map (kbd "C-i") #'gptel-aibo-summon))
 ```
 
+Considering that LLM requests are usually slow, `gptel-aibo-summon` inserts the
+result at the request position even if your cursor has already moved away by
+the time the response arrives.
+
+If you don’t like this behavior, you can set the custom variable
+`gptel-aibo-summon-cancel-after-moved` to `t` to disable it.
+
 
 ## Samples
 ### Query the logic, request additional cases
@@ -117,6 +124,12 @@ this inconvenience will be eliminated through a more automated approach, like
 tool calling.
 
 ![Sample project refactor](assets/aibo-refactor-sample-800-10.gif)
+
+### Completion at point
+*NOTE*: Some frames were removed to avoid enduring rather slow LLM requests.
+
+https://github.com/user-attachments/assets/178b76df-32d8-4fcd-9d3b-40539c4cc23c
+
 
 ### Other common tasks & ideas
 - generate a docstring for this function
