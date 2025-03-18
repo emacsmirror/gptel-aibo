@@ -76,6 +76,7 @@ is only inserted in `gptel-aibo' console buffers."
 (defvar gptel-aibo-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c RET") #'gptel-aibo-send)
+    (define-key map (kbd "C-c <return>") #'gptel-aibo-send)
     (define-key map (kbd "C-c !") #'gptel-aibo-apply-last-suggestions)
     map)
   "Keymap for `gptel-aibo-mode'.")
