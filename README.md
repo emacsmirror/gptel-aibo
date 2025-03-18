@@ -128,7 +128,7 @@ tool calling.
 ### Completion at point
 *NOTE*: Some frames were removed to avoid enduring rather slow LLM requests.
 
-https://github.com/user-attachments/assets/178b76df-32d8-4fcd-9d3b-40539c4cc23c
+https://github.com/user-attachments/assets/89f97bef-15a0-4d18-815e-87611f69eb85
 
 
 ### Other common tasks & ideas
