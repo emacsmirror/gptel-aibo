@@ -723,11 +723,16 @@ POS is the position to center on, or the current point if nil."
           (setq start (point)))
 
         ;; Expand while within max-length
-        (while (and (< (- end start) max-length)
-                    (or (> start (point-min)) (< end (point-max))))
+        (let* ((start-changed t)
+               (end-changed t))
+          (while (and (or start-changed end-changed)
+                      (< (- end start) max-length)
+                      (or (> start (point-min)) (< end (point-max))))
           ;; Move to `start` and extend backwards
           (goto-char start)
           (beginning-of-defun)
+          ;; Check whether the value of `start` changes
+          (setq start-changed (not (eq start (point))))
           (setq start (point))
 
           ;; Move to `start` again and extend forwards
@@ -738,7 +743,9 @@ POS is the position to center on, or the current point if nil."
               ;; Otherwise, move to previous `end` and extend
               (goto-char end)
               (end-of-defun)
-              (setq end (point)))))
+              ;; Check whether the value of `end` changes
+              (setq end-changed (not (eq end (point))))
+              (setq end (point))))))
 
       ;; Adjust boundaries if exceeding max-length
       (if (<= (- end start) max-length)
