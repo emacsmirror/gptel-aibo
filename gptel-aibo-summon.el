@@ -118,6 +118,8 @@ Start with the line:
 <OP> CREATE `<FILEPATH>`
 
 `<FILEPATH>` is the path of the file to be created and must be provided.
+An absolute path is preferred. If a project root is defined, a path relative to
+it is also acceptable.
 Next, leave one blank line, then specify the file content, enclosed in a markdown
 fenced code block.
 
@@ -246,11 +248,11 @@ the current buffer's content and position."
              (not (evil-insert-state-p)))
     (evil-insert-state))
   (let ((bounds (bounds-of-thing-at-point 'word)))
-  (when bounds
-    (let ((start (car bounds))
-          (end (cdr bounds)))
-      (when (> (point) start)
-        (goto-char end)))))
+    (when bounds
+      (let ((start (car bounds))
+            (end (cdr bounds)))
+        (when (> (point) start)
+          (goto-char end)))))
   (let ((gptel--system-message gptel-aibo--system-role)
         (prompt (concat "Request context:\n\n"
                         (gptel-aibo-summon-context-info)
@@ -570,11 +572,11 @@ RET applies changes, ESC reverts to original."
     (goto-char search-beg))
   (when (search-forward search (or search-end (point-max)) t)
     (let* ((ov (gptel-aibo--inplace-render-diffs
-                   (+ (match-beginning 0) (car diff-offsets))
-                   (- (match-end 0) (cdr diff-offsets))
-                   diffs))
-              (sub-ovs (overlay-get ov 'sub-ovs))
-              (keymap (make-sparse-keymap)))
+                (+ (match-beginning 0) (car diff-offsets))
+                (- (match-end 0) (cdr diff-offsets))
+                diffs))
+           (sub-ovs (overlay-get ov 'sub-ovs))
+           (keymap (make-sparse-keymap)))
 
       (overlay-put ov 'keymap keymap)
 
@@ -652,7 +654,7 @@ Returning ''((str1-diff-part . str2-diff-part)
                                           (- str1-end-offset))))
              (str2-diff-part (substring str2 str2-start-offset
                                         (when (> str2-end-offset 0)
-                                           (- str2-end-offset)))))
+                                          (- str2-end-offset)))))
         (list (cons str1-diff-part str2-diff-part)
               (cons str1-start-offset str1-end-offset))))))
 

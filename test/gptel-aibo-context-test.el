@@ -66,17 +66,21 @@ and the second is the associated file path."
     (cl-letf (((symbol-function 'project-current)
                (lambda (&optional _)
                  (list 'transient default-directory))))
-      (should (equal (gptel-aibo--project-buffers buf1)
+      (should (equal (with-current-buffer buf1
+                       (gptel-aibo--project-buffers))
                      (list buf2 buf3)))
 
-      (should (equal (gptel-aibo--project-buffers buf2)
+      (should (equal (with-current-buffer buf2
+                       (gptel-aibo--project-buffers))
                      (list buf1 buf3)))
 
       ;; Single
-      (should-not (gptel-aibo--project-buffers buf4)))
+      (should-not (with-current-buffer buf4
+                    (gptel-aibo--project-buffers))))
 
     ;; No project
-    (should-not (gptel-aibo--project-buffers buf1)))))
+    (should-not (with-current-buffer buf1
+                  (gptel-aibo--project-buffers))))))
 
 (ert-deftest test-gptel-aibo-context-info ()
   (with-temp-directory
@@ -245,7 +249,8 @@ Content:
                              (buffer-file-name buf3)))
              (gptel-aibo-max-buffer-size 10240)
              (gptel-aibo-max-buffer-count 2)
-             (info (gptel-aibo--project-buffers-info buf1)))
+             (info (with-current-buffer buf1
+                     (gptel-aibo--project-buffers-info))))
         (should (equal info expect)))
 
       ;; Test buffer size limit
@@ -265,7 +270,8 @@ Content:
                              (buffer-file-name buf3)))
              (gptel-aibo-max-buffer-size 2)
              (gptel-aibo-max-buffer-count 2)
-             (info (gptel-aibo--project-buffers-info buf1)))
+             (info (with-current-buffer buf1
+                     (gptel-aibo--project-buffers-info))))
         (should (equal info expect)))
 
       (with-current-buffer buf2
@@ -296,7 +302,8 @@ Content:
                              (buffer-file-name buf3)))
              (gptel-aibo-max-buffer-size 2)
              (gptel-aibo-max-buffer-count 2)
-             (info (gptel-aibo--project-buffers-info buf1)))
+             (info (with-current-buffer buf1
+                     (gptel-aibo--project-buffers-info))))
         (should (equal info expect)))
 
       ;; Test buffer count limit
@@ -315,7 +322,8 @@ hello
                              (buffer-file-name buf2)))
              (gptel-aibo-max-buffer-size 10240)
              (gptel-aibo-max-buffer-count 1)
-             (info (gptel-aibo--project-buffers-info buf1)))
+             (info (with-current-buffer buf1
+                     (gptel-aibo--project-buffers-info))))
         (should (equal info expect)))))))
 
 (ert-deftest test-gptel-aibo--make-code-block ()
@@ -504,7 +512,7 @@ This is the second line.
 This is the last line.
 ```
 and is positioned after `This ` and before `is the last line.`."
-))))
+      ))))
 
 (ert-deftest test-gptel-aibo--cursor-position-info ()
   "Test suite for gptel-aibo--cursor-position-info function."

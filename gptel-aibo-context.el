@@ -80,21 +80,21 @@ will be discarded."
 
 (defun gptel-aibo-context-info (&optional buffer)
   "Get context information for BUFFER."
-  (concat (gptel-aibo--working-buffer-info buffer)
-          "\n\n"
-          (gptel-aibo--project-buffers-info buffer)))
-
-(defun gptel-aibo--working-buffer-info (&optional buffer)
-  "Get context information about BUFFER."
   (with-current-buffer (or buffer (current-buffer))
-    (let* ((active-buffer-size (- (point-max) (point-min))))
-      (concat
-       (format "Current working buffer: `%s`\n" (buffer-name))
-       (if (<= active-buffer-size gptel-aibo-max-buffer-size)
-           (concat
-            (gptel-aibo--buffer-info)
-            (gptel-aibo--cursor-position-info))
-         (gptel-aibo--fragment-info))))))
+    (concat (gptel-aibo--working-buffer-info)
+            "\n\n"
+            (gptel-aibo--project-buffers-info))))
+
+(defun gptel-aibo--working-buffer-info ()
+  "Get context information about the current buffer."
+  (let* ((active-buffer-size (- (point-max) (point-min))))
+    (concat
+     (format "Current working buffer: `%s`\n" (buffer-name))
+     (if (<= active-buffer-size gptel-aibo-max-buffer-size)
+         (concat
+          (gptel-aibo--buffer-info)
+          (gptel-aibo--cursor-position-info))
+       (gptel-aibo--fragment-info)))))
 
 (defun gptel-aibo--fragment-info (&optional buffer)
   "Get fragment information around cursor about BUFFER."
@@ -154,23 +154,23 @@ BUFFER is the buffer to check, or the current buffer if nil."
 
 (defun gptel-aibo-summon-context-info (&optional buffer)
   "Get context information for BUFFER."
-  (concat (gptel-aibo--summon-buffer-info buffer)
-          "\n\n"
-          (gptel-aibo--project-buffers-info buffer)))
-
-(defun gptel-aibo--summon-buffer-info (&optional buffer)
-  "Get context information about BUFFER for summon."
   (with-current-buffer (or buffer (current-buffer))
-    (let ((active-buffer-size (- (point-max) (point-min))))
-      (concat
-       (format "Current working buffer: `%s`\n" (buffer-name))
-       (cond
-        ((zerop active-buffer-size)
-         "Content: (empty)")
-        ((<= active-buffer-size gptel-aibo-max-buffer-size)
-         (gptel-aibo--cursoring-buffer-info))
-        (t
-         (gptel-aibo--cursoring-fragment-info)))))))
+    (concat (gptel-aibo--summon-buffer-info)
+            "\n\n"
+            (gptel-aibo--project-buffers-info))))
+
+(defun gptel-aibo--summon-buffer-info ()
+  "Get context information about the current buffer for summon."
+  (let ((active-buffer-size (- (point-max) (point-min))))
+    (concat
+     (format "Current working buffer: `%s`\n" (buffer-name))
+     (cond
+      ((zerop active-buffer-size)
+       "Content: (empty)")
+      ((<= active-buffer-size gptel-aibo-max-buffer-size)
+       (gptel-aibo--cursoring-buffer-info))
+      (t
+       (gptel-aibo--cursoring-fragment-info))))))
 
 (defvar gptel-aibo--cursor-notes
   "Note the marker `%s` serves only as a cursor position indicator. It is not
@@ -372,7 +372,7 @@ and restricted by START and END"
       "The cursor is positioned at the end of the first line of the fragment.")
      (t
       (let* ((before-cursor (buffer-substring-no-properties
-                            line-beginning
+                             line-beginning
                              (point)))
              (after-cursor (buffer-substring-no-properties
                             (point)
@@ -640,11 +640,11 @@ DEPTH is the current depth for indentation."
     (substring-no-properties item))
    (t (format "%s" item))))
 
-(cl-defun gptel-aibo--project-buffers-info (&optional buffer quota)
+(cl-defun gptel-aibo--project-buffers-info (&optional quota)
   "Get information about other buffers in the same project of BUFFER.
 
 The total size of the returned information will be limited by QUOTA."
-  (let* ((buffers (gptel-aibo--project-buffers buffer))
+  (let* ((buffers (gptel-aibo--project-buffers))
          (buffer-infos nil)
          (current-size 0)
          (buffer-count 0))
@@ -674,18 +674,16 @@ The total size of the returned information will be limited by QUOTA."
                           (nreverse buffer-infos) "\n")
                "\n\n")))))
 
-(defun gptel-aibo--project-buffers (&optional buffer)
-  "Get buffers in the same project as BUFFER, itself excluded."
-  (let ((current-buffer (or buffer (current-buffer))))
-    (when-let ((project-current (with-current-buffer current-buffer
-                                  (project-current))))
-      (seq-filter
-       (lambda (buf)
-         (and (not (eq buf current-buffer))
-              (buffer-file-name buf)
-              (with-current-buffer buf
-                (equal (project-current) project-current))))
-       (buffer-list)))))
+(defun gptel-aibo--project-buffers ()
+  "Get buffers in the same project as current buffer, itself excluded."
+  (when-let ((project-current (project-current)))
+    (seq-filter
+     (lambda (buf)
+       (and (not (eq buf (current-buffer)))
+            (buffer-file-name buf)
+            (with-current-buffer buf
+              (equal (project-current) project-current))))
+     (buffer-list))))
 
 (defun gptel-aibo--max-fragment (max-length)
   "Extract the text fragment around the point.
@@ -747,13 +745,13 @@ POS is the position to center on, or the current point if nil."
               (setq end-changed (not (eq end (point))))
               (setq end (point))))))
 
-      ;; Adjust boundaries if exceeding max-length
-      (if (<= (- end start) max-length)
-          (cons start end)
-        (let* ((half-limit (/ max-length 2))
-               (adjusted-start (max start (- pos half-limit)))
-               (adjusted-end (min end (+ adjusted-start max-length))))
-          (cons adjusted-start adjusted-end)))))))
+        ;; Adjust boundaries if exceeding max-length
+        (if (<= (- end start) max-length)
+            (cons start end)
+          (let* ((half-limit (/ max-length 2))
+                 (adjusted-start (max start (- pos half-limit)))
+                 (adjusted-end (min end (+ adjusted-start max-length))))
+            (cons adjusted-start adjusted-end)))))))
 
 (defun gptel-aibo--unique-region-p (beg end)
   "Check if the text between BEG and END appears uniquely in the buffer.

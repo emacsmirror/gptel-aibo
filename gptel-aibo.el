@@ -41,8 +41,6 @@
 
 (defvar-local gptel-aibo--old-use-context nil)
 
-(defvar-local gptel-aibo--old-context-wrap-function nil)
-
 (defvar-local gptel-aibo--from-gptel-mode nil
   "If this from `gptel-mode'.")
 
@@ -98,8 +96,6 @@ is only inserted in `gptel-aibo' console buffers."
         (setq-local gptel--system-message gptel-aibo--system-message)
         (setq gptel-aibo--old-use-context gptel-use-context)
         (setq-local gptel-use-context 'user)
-        (setq gptel-aibo--old-context-wrap-function gptel-context-wrap-function)
-        (setq-local gptel-context-wrap-function #'gptel-aibo-context-wrap)
         (when gptel-use-header-line
           (setq header-line-format
                 (cons '(:eval (concat
@@ -118,15 +114,24 @@ is only inserted in `gptel-aibo' console buffers."
     (setq-local gptel-directives gptel-aibo--old-directives)
     (setq-local gptel--system-message gptel-aibo--old-system-message)
     (setq-local gptel-use-context gptel-aibo--old-use-context)
-    (setq-local gptel-context-wrap-function gptel-aibo--old-context-wrap-function)
     (unless gptel-aibo--from-gptel-mode
       (gptel-mode -1))
     (message "gptel-aibo-mode disabled")))
 
-(defun gptel-aibo-context-wrap (message contexts)
-  "Wrap MESSAGE with CONTEXTS for gptel."
-  (let ((context-string
-         (concat "---
+(defun gptel-aibo--transform-add-context (callback fsm)
+  "Transform context use buffer in FSM, call CALLBACK in the last."
+  (when gptel-use-context
+    (let ((data-buffer (plist-get (gptel-fsm-info fsm) :data))
+          (console-buffer (plist-get (gptel-fsm-info fsm) :buffer)))
+      (with-current-buffer data-buffer
+        (thread-last (gptel-context--collect)
+                     (gptel-aibo-context-string console-buffer)
+                     (gptel-context--wrap-in-buffer)))))
+  (funcall callback))
+
+(defun gptel-aibo-context-string (console-buffer context-alist)
+  "Format context string from CONTEXT-ALIST with CONSOLE-BUFFER."
+  (let* ((header "---
 
 Request context:
 
@@ -135,16 +140,17 @@ there is a conflict with inferred content, the context takes precedence, as
 previous suggested actions may not have been executed and the user may have made
 changes outside this conversation.
 
-"
-                 (gptel-aibo-context-info gptel-aibo--working-buffer)
-                 (gptel-context--string contexts))))
-    ;; (message "context: %s" context-string)
-    (if (> (length context-string) 0)
-        (pcase-exhaustive gptel-use-context
-          ('system (concat message "\n\n" context-string))
-          ('user   (concat message "\n\n" context-string))
-          ('nil    message))
-      message)))
+")
+         (working-context (gptel-aibo-context-info
+                           (buffer-local-value
+                            'gptel-aibo--working-buffer
+                            console-buffer)))
+         (other-context (gptel-context--string context-alist)))
+    (concat header
+            working-context
+            (when (and other-context (not (string-empty-p other-context)))
+              (concat "\n\nOther " other-context)))))
+
 
 (defun gptel-aibo--window-selection-change (window)
   "Handle window selection change to update working buffer and project.
@@ -272,8 +278,8 @@ Optional argument BUFFER specifies the name of the buffer to manage."
 Keys from A1 take precedence and appear first in the result.
 Returns a new alist containing all unique keys."
   (let* ((a2-filtered (cl-remove-if (lambda (pair)
-                                     (assoc (car pair) a1))
-                                   a2)))
+                                      (assoc (car pair) a1))
+                                    a2)))
     (append a1 a2-filtered)))
 
 (defcustom gptel-aibo-auto-apply nil
@@ -313,7 +319,9 @@ Returns a new alist containing all unique keys."
             (setq beg (point))
             (add-text-properties beg end `(gptaiu ,gptel-aibo--working-buffer)))
           t))
-      (gptel-send)
+      (let ((gptel-prompt-transform-functions
+             '(gptel--transform-apply-preset gptel-aibo--transform-add-context)))
+        (gptel-send))
     (message "Empty input received. Could you please type something?")))
 
 (defun gptel-aibo--handle-post-insert (fsm)
