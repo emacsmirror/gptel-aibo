@@ -143,10 +143,11 @@ content contains three or more backtick sequences, use a longer fence instead.
 
 ### Additional Notes
 
-You are free to add thoughts, reasoning, comments, or other relevant information
-before, between, or after the operations as needed, but never start a line of
-such content with `<OP>`, as it may be misinterpreted as an operation, or insert
-descriptive material inside an operation, as it may disrupt the parsing.
+You may add brief explanatory text before or after operations, but:
+1. Never start any line with `<OP>` unless it's an actual operation
+2. Never insert any text between operation markers (*SEARCH*, *REPLACE*, etc.)
+3. Never add content inside code blocks except the actual code
+4. Keep explanations minimal to avoid parsing conflicts
 "))
 
 (defvar gptel-aibo--complete-message
@@ -166,73 +167,61 @@ suitable content can be suggested, return an empty string.")
 (defvar gptel-aibo--summon-prompt
   "**Your Task**:
 Provide content suitable for insertion at the cursor position to complete the
-unfinished statements. Use a SEARCH/REPLACE pair to apply the change.
-The format is as follows:
+unfinished statements.
+
+**CRITICAL FORMAT REQUIREMENTS**:
+1. You MUST provide exactly one primary SEARCH/REPLACE pair
+2. Each SEARCH/REPLACE pair MUST be enclosed in properly fenced code blocks with ```
+3. Do NOT add any explanatory text between the *SEARCH* and *REPLACE* markers
+4. Do NOT add any text inside the code blocks except the actual code content
+
+**Required Format**:
 
 *SEARCH*
-```language-id (OPTIONAL)
+```
 {{Content around the cursor to be replaced}}
 ```
 *REPLACE*
-```language-id (OPTIONAL)
+```
 {{Content to replace with}}
 ```
 
-Please replace the placeholder text inside the markers `{{` and `}}`, along with
-the markers themselves, with the actual content of the SEARCH or REPLACE.
-
 ### Rules
-1. Only provide concrete, definitive content at the insertion point. Do not use a
-   template or outline, or mix with explanations.
-2. Do not modify other parts of the content. If the insertion leads to changes
-   that should be made to the next few lines, place those changes in the
-   \"Nearby Modification\" section, which will be introduced later.
-3. SEARCH must include some surrounding text for accuracy but should not contain
-   irrelevant content. The cursor position alone is not sufficient, and excessive
-   context may make SEARCH/REPLACE unidentifiable.
-4. If the context is unclear, provide only a minimal insertion that stands on its
-   own. For example, if the context suggests adding one or multiple items
-   (such as elements, statements, or other definitions) but the exact number cannot
-   be inferred, adding a single item is sufficient, and the possibly second one
-   can be placed in the \"Next Predicts\" section, which will be introduced later.
+1. SEARCH must include enough surrounding text for accurate matching but should not contain irrelevant content
+2. SEARCH content must exactly match the original text, including whitespace and indentation
+3. Only provide concrete, definitive content - no templates, outlines, or explanations
+4. If the context is unclear, provide only a minimal insertion that stands on its own
 
-### Nearby Modification
-After inserting the provided content, if the next few lines in the original
-content are very likely to require modification accordingly, you may also provide
-a SEARCH/REPLACE pair to modify them. Start Nearby Modification with the marker line
-```
+### Optional Sections
+After the primary SEARCH/REPLACE pair, you may optionally include:
+
+**Nearby Modification** (for changes to existing content that ensure consistency):
 =Nearby Modification=
+*SEARCH*
+```
+{{existing content to modify}}
+```
+*REPLACE*
+```
+{{modified content}}
 ```
 
-### Next Predicts
-After inserting the provided content, you may also optionally provide a
-Next Predicts section, still in a SEARCH/REPLACE pair format.
-
-**Key Difference With Nearby Modification**
-
-- Nearby Modification is for changes to the existing content that ensure consistency
-  or correctness after the insertion.
-- Next Predicts is about predicting what content will logically come next, based on
-  the structure of the document.
-
-Like the primary insertion, Next Predicts should provide concrete, definitive
-content rather than a template or outline.
-
-The SEARCH part of Next Predicts would often refer to the updated document
-structure after this insertion.
-
-For simplicity, do not provide Nearby Modification for Next Predicts.
-
-Start Next Predicts with the marker line
-```
+**Next Predicts** (for predicting what content comes next):
 =Next Predicts=
+*SEARCH*
+```
+{{content after the insertion}}
+```
+*REPLACE*
+```
+{{predicted next content}}
 ```
 
-### Final Notes
-1. Make decisions based solely on the information provided to you. Do not call
-   tools or ask questions to obtain additional information.
-2. If there’s no applicable content to provide, return an empty string as the
-   entire result.
+### Critical Notes
+1. Each code block must start and end with exactly three backticks on their own lines
+2. Do not include language identifiers after the opening backticks unless necessary
+3. Do not add any explanatory text between markers
+4. If no applicable content can be provided, return an empty string
 
 ")
 
